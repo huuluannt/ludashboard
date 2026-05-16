@@ -16,7 +16,7 @@
 - ✅ **Calculator**: Scientific, clean UI.
 - ✅ **Image Resizer**: Drag/drop, aspect ratio lock, format conversion, canvas resize, download.
 - ✅ **Notes**: Multi-note list, simple text editor, color labels, IndexedDB persistence.
-- ✅ **LuVideo**: Native YouTube player with search, autoplay, and API key management.
+- ✅ **LuVideo**: Native YouTube player with search, autoplay, internal playlists, and API key management.
 - ✅ **Placeholders**: PDF Tools, Unit Converter, Cloud Storage, World Clock.
 
 ## Pending / Future Systems

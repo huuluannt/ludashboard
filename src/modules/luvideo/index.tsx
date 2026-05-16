@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, PlayCircle, SkipBack, SkipForward, Repeat, X, Key, Info, ExternalLink } from 'lucide-react';
+import { 
+  Search, PlayCircle, SkipBack, SkipForward, Repeat, X, Key, Info, 
+  ExternalLink, List, Plus, Trash2, Edit2, Check, MoreVertical, FolderPlus
+} from 'lucide-react';
 import Icon from '@/components/Icon';
-import { VideoItem } from './types';
+import { VideoItem, Playlist, SavedVideo } from './types';
 import { searchVideos } from './youtubeApi';
 
 const STORAGE_KEY = 'luvideo_api_key';
 const AUTOPLAY_KEY = 'luvideo_autoplay';
+const PLAYLISTS_KEY = 'luvideo_playlists';
 const DEFAULT_QUERY = 'trending music';
 
 declare global {
@@ -18,6 +22,11 @@ declare global {
 export default function LuVideoModule() {
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem(STORAGE_KEY) || '');
   const [autoplay, setAutoplay] = useState<boolean>(() => localStorage.getItem(AUTOPLAY_KEY) !== 'false');
+  const [playlists, setPlaylists] = useState<Playlist[]>(() => {
+    const saved = localStorage.getItem(PLAYLISTS_KEY);
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(-1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,8 +34,21 @@ export default function LuVideoModule() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Playlist Mode States
+  const [viewMode, setViewMode] = useState<'search' | 'playlists'>('search');
+  const [playbackSource, setPlaybackSource] = useState<'search' | 'playlists'>('search');
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [showAddMenu, setShowAddMenu] = useState<string | null>(null); // videoId
+
   const playerRef = useRef<any>(null);
   const ytApiLoaded = useRef(false);
+
+  // Persistence
+  useEffect(() => {
+    localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
+  }, [playlists]);
 
   // Initialize YT API
   useEffect(() => {
@@ -54,6 +76,8 @@ export default function LuVideoModule() {
     if (!query.trim() || !apiKey) return;
     setIsSearching(true);
     setError(null);
+    setViewMode('search');
+    setPlaybackSource('search');
     try {
       const results = await searchVideos(query, apiKey);
       setVideos(results);
@@ -70,16 +94,23 @@ export default function LuVideoModule() {
     }
   };
 
-  const playVideo = (index: number) => {
-    if (index < 0 || index >= videos.length) return;
+  const activeVideos = playbackSource === 'search' 
+    ? videos 
+    : playlists.find(p => p.id === activePlaylistId)?.videos || [];
+
+  const playVideo = (index: number, source: 'search' | 'playlists' = viewMode) => {
+    const targetVideos = source === 'search' ? videos : playlists.find(p => p.id === activePlaylistId)?.videos || [];
+    if (index < 0 || index >= targetVideos.length) return;
+    
+    setPlaybackSource(source);
     setCurrentIndex(index);
   };
 
   const navigate = (dir: number) => {
     const next = currentIndex + dir;
-    if (next >= 0 && next < videos.length) {
+    if (next >= 0 && next < activeVideos.length) {
       setCurrentIndex(next);
-    } else if (dir === 1 && videos.length > 0) {
+    } else if (dir === 1 && activeVideos.length > 0) {
       setCurrentIndex(0); // Loop
     }
   };
@@ -88,12 +119,12 @@ export default function LuVideoModule() {
     if (event.data === 0 && autoplay) { // YT.PlayerState.ENDED
       navigate(1);
     }
-  }, [autoplay, videos.length, currentIndex]);
+  }, [autoplay, activeVideos.length, currentIndex]);
 
   useEffect(() => {
-    if (currentIndex === -1 || !videos[currentIndex]) return;
+    if (currentIndex === -1 || !activeVideos[currentIndex]) return;
 
-    const videoId = videos[currentIndex].id;
+    const videoId = activeVideos[currentIndex].id;
     
     if (ytApiLoaded.current && window.YT && window.YT.Player) {
       if (playerRef.current) {
@@ -106,7 +137,7 @@ export default function LuVideoModule() {
         createPlayer(videoId);
       }
     }
-  }, [currentIndex]);
+  }, [currentIndex, playbackSource, activePlaylistId]);
 
   const createPlayer = (videoId: string) => {
     playerRef.current = new window.YT.Player('luvideo-player', {
@@ -132,6 +163,54 @@ export default function LuVideoModule() {
     });
   };
 
+  // Playlist Management
+  const createPlaylist = (name: string) => {
+    if (!name.trim()) return;
+    const newPlaylist: Playlist = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      videos: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setPlaylists([...playlists, newPlaylist]);
+    setNewPlaylistName('');
+    setIsCreatingPlaylist(false);
+    return newPlaylist.id;
+  };
+
+  const deletePlaylist = (id: string) => {
+    setPlaylists(playlists.filter(p => p.id !== id));
+    if (activePlaylistId === id) {
+      setActivePlaylistId(null);
+      if (playbackSource === 'playlists') {
+        setPlaybackSource('search');
+        setCurrentIndex(-1);
+      }
+    }
+  };
+
+  const addVideoToPlaylist = (playlistId: string, video: VideoItem) => {
+    setPlaylists(playlists.map(p => {
+      if (p.id === playlistId) {
+        if (p.videos.find(v => v.id === video.id)) return p;
+        const saved: SavedVideo = { ...video, savedAt: new Date().toISOString() };
+        return { ...p, videos: [...p.videos, saved], updatedAt: new Date().toISOString() };
+      }
+      return p;
+    }));
+    setShowAddMenu(null);
+  };
+
+  const removeVideoFromPlaylist = (playlistId: string, videoId: string) => {
+    setPlaylists(playlists.map(p => {
+      if (p.id === playlistId) {
+        return { ...p, videos: p.videos.filter(v => v.id !== videoId), updatedAt: new Date().toISOString() };
+      }
+      return p;
+    }));
+  };
+
   const saveApiKey = (newKey: string) => {
     setApiKey(newKey);
     localStorage.setItem(STORAGE_KEY, newKey);
@@ -145,11 +224,13 @@ export default function LuVideoModule() {
     localStorage.setItem(AUTOPLAY_KEY, String(newVal));
   };
 
+  const activePlaylist = playlists.find(p => p.id === activePlaylistId);
+
   return (
     <div className="flex flex-col h-full bg-[#0a0a0f] text-[#f0f0f8] overflow-hidden font-sans">
       {/* Header / Search Bar */}
       <header className="flex items-center gap-4 px-6 h-16 border-b border-white/10 bg-[#0a0a0f]/90 backdrop-blur-xl sticky top-0 z-10">
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={() => setViewMode('search')}>
           <div className="w-8 h-8 bg-[#e8ff47] text-black flex items-center justify-center rounded-lg font-black text-xs">▶</div>
           <span className="font-bold text-xl tracking-tight hidden sm:inline">Lu<em className="text-[#e8ff47] not-italic">Video</em></span>
         </div>
@@ -173,6 +254,16 @@ export default function LuVideoModule() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setViewMode(viewMode === 'playlists' ? 'search' : 'playlists')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition-all ${
+              viewMode === 'playlists' ? 'border-[#e8ff47] text-[#e8ff47] bg-[#e8ff47]/10' : 'border-white/10 text-white/50'
+            }`}
+          >
+            <List size={14} />
+            <span className="hidden sm:inline">Playlists</span>
+          </button>
+          
+          <button
             onClick={toggleAutoplay}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition-all ${
               autoplay ? 'border-[#e8ff47] text-[#e8ff47] bg-[#e8ff47]/10' : 'border-white/10 text-white/50'
@@ -182,6 +273,7 @@ export default function LuVideoModule() {
             <span className="hidden sm:inline">Autoplay</span>
             <span className={`font-bold ${autoplay ? 'text-[#e8ff47]' : 'text-white/30'}`}>{autoplay ? 'ON' : 'OFF'}</span>
           </button>
+          
           <button
             onClick={() => setShowApiKeyModal(true)}
             className="p-2 text-white/50 hover:text-white transition-colors"
@@ -217,7 +309,7 @@ export default function LuVideoModule() {
                   <PlayCircle size={40} />
                 </div>
                 <h2 className="text-xl font-bold mb-2">Ready to watch?</h2>
-                <p className="text-white/40 text-sm">Search and select a video from the list</p>
+                <p className="text-white/40 text-sm">Search or select a playlist video</p>
               </div>
             ) : (
               <div id="luvideo-player" className="w-full h-full" />
@@ -225,12 +317,14 @@ export default function LuVideoModule() {
           </div>
 
           {/* Now Playing Bar */}
-          {currentIndex !== -1 && videos[currentIndex] && (
+          {currentIndex !== -1 && activeVideos[currentIndex] && (
             <div className="bg-[#111118] border-t border-white/10 p-4 flex items-center gap-4 animate-in slide-in-from-bottom duration-300">
               <div className="flex-1 min-width-0">
-                <span className="text-[10px] font-bold text-[#e8ff47] tracking-[0.2em] uppercase block mb-1">Now Playing</span>
-                <h3 className="text-sm font-bold truncate leading-tight">{videos[currentIndex].title}</h3>
-                <span className="text-xs text-white/40">{videos[currentIndex].channel}</span>
+                <span className="text-[10px] font-bold text-[#e8ff47] tracking-[0.2em] uppercase block mb-1">
+                  Now Playing {playbackSource === 'playlists' && `• ${playlists.find(p => p.id === activePlaylistId)?.name}`}
+                </span>
+                <h3 className="text-sm font-bold truncate leading-tight">{activeVideos[currentIndex].title}</h3>
+                <span className="text-xs text-white/40">{activeVideos[currentIndex].channel}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -254,64 +348,290 @@ export default function LuVideoModule() {
 
         {/* Sidebar / Video List */}
         <aside className="w-full md:w-[380px] flex flex-col bg-[#111118] overflow-hidden">
-          <div className="p-4 border-b border-white/10 flex items-center justify-between">
-            <h4 className="text-[10px] font-bold text-white/30 tracking-[0.1em] uppercase">
-              {videos.length > 0 ? `Results (${videos.length})` : 'Queue'}
-            </h4>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-            {isSearching ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex gap-3 p-2 animate-pulse">
-                  <div className="w-32 h-[72px] bg-white/5 rounded-lg flex-shrink-0" />
-                  <div className="flex-1 space-y-2 py-1">
-                    <div className="h-3 bg-white/5 rounded w-full" />
-                    <div className="h-3 bg-white/5 rounded w-2/3" />
-                    <div className="h-2 bg-white/5 rounded w-1/2 mt-2" />
-                  </div>
-                </div>
-              ))
-            ) : videos.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full py-10 opacity-30">
-                <Icon name="play-circle" size={40} className="mb-4" />
-                <p className="text-sm">No videos found</p>
+          {viewMode === 'search' ? (
+            <>
+              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                <h4 className="text-[10px] font-bold text-white/30 tracking-[0.1em] uppercase">
+                  {videos.length > 0 ? `Results (${videos.length})` : 'Search Queue'}
+                </h4>
               </div>
-            ) : (
-              videos.map((video, index) => (
-                <button
-                  key={video.id}
-                  onClick={() => playVideo(index)}
-                  className={`w-full flex gap-3 p-2 rounded-xl transition-all text-left hover:bg-white/5 group ${
-                    currentIndex === index ? 'bg-[#e8ff47]/5 border border-[#e8ff47]/20' : 'border border-transparent'
-                  }`}
-                >
-                  <div className="relative flex-shrink-0 w-32 h-[72px] bg-black rounded-lg overflow-hidden">
-                    <img src={video.thumb} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
-                    {video.duration && (
-                      <span className="absolute bottom-1 right-1 bg-black/80 text-[10px] font-bold px-1.5 py-0.5 rounded text-white">
-                        {video.duration}
-                      </span>
-                    )}
-                    {currentIndex === index && (
-                      <div className="absolute inset-0 bg-[#e8ff47]/20 flex items-center justify-center text-[#e8ff47]">
-                        <PlayCircle size={24} />
+
+              <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                {isSearching ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="flex gap-3 p-2 animate-pulse">
+                      <div className="w-32 h-[72px] bg-white/5 rounded-lg flex-shrink-0" />
+                      <div className="flex-1 space-y-2 py-1">
+                        <div className="h-3 bg-white/5 rounded w-full" />
+                        <div className="h-3 bg-white/5 rounded w-2/3" />
+                        <div className="h-2 bg-white/5 rounded w-1/2 mt-2" />
                       </div>
+                    </div>
+                  ))
+                ) : videos.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full py-10 opacity-30">
+                    <Icon name="play-circle" size={40} className="mb-4" />
+                    <p className="text-sm">No videos found</p>
+                  </div>
+                ) : (
+                  videos.map((video, index) => (
+                    <div key={video.id} className="relative group">
+                      <button
+                        onClick={() => playVideo(index, 'search')}
+                        className={`w-full flex gap-3 p-2 rounded-xl transition-all text-left hover:bg-white/5 ${
+                          playbackSource === 'search' && currentIndex === index ? 'bg-[#e8ff47]/5 border border-[#e8ff47]/20' : 'border border-transparent'
+                        }`}
+                      >
+                        <div className="relative flex-shrink-0 w-32 h-[72px] bg-black rounded-lg overflow-hidden">
+                          <img src={video.thumb} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
+                          {video.duration && (
+                            <span className="absolute bottom-1 right-1 bg-black/80 text-[10px] font-bold px-1.5 py-0.5 rounded text-white">
+                              {video.duration}
+                            </span>
+                          )}
+                          {playbackSource === 'search' && currentIndex === index && (
+                            <div className="absolute inset-0 bg-[#e8ff47]/20 flex items-center justify-center text-[#e8ff47]">
+                              <PlayCircle size={24} />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-width-0">
+                          <h5 className={`text-[13px] font-bold leading-tight mb-1 line-clamp-2 ${
+                            playbackSource === 'search' && currentIndex === index ? 'text-[#e8ff47]' : 'text-white'
+                          }`}>
+                            {video.title}
+                          </h5>
+                          <p className="text-[11px] text-white/40 truncate">{video.channel}</p>
+                          <p className="text-[10px] text-white/20 mt-1">{video.published && new Date(video.published).toLocaleDateString()}</p>
+                        </div>
+                      </button>
+                      
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowAddMenu(showAddMenu === video.id ? null : video.id);
+                        }}
+                        className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#e8ff47] hover:text-black"
+                      >
+                        <Plus size={14} />
+                      </button>
+
+                      {showAddMenu === video.id && (
+                        <div className="absolute top-10 right-2 w-48 bg-[#18181f] border border-white/10 rounded-xl shadow-2xl z-20 py-2 animate-in zoom-in-95 duration-200">
+                          <div className="px-3 py-1 mb-1 text-[10px] font-bold text-white/30 uppercase tracking-wider">Add to Playlist</div>
+                          <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                            {playlists.map(p => (
+                              <button
+                                key={p.id}
+                                onClick={() => addVideoToPlaylist(p.id, video)}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-[#e8ff47]/10 hover:text-[#e8ff47] transition-colors flex items-center justify-between"
+                              >
+                                <span className="truncate">{p.name}</span>
+                                {p.videos.some(v => v.id === video.id) && <Check size={12} />}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="border-t border-white/5 mt-1 pt-1">
+                            <button
+                              onClick={() => {
+                                const name = prompt('New playlist name:');
+                                if (name) {
+                                  const id = createPlaylist(name);
+                                  if (id) addVideoToPlaylist(id, video);
+                                }
+                              }}
+                              className="w-full text-left px-3 py-2 text-xs text-[#e8ff47] hover:bg-[#e8ff47]/10 transition-colors flex items-center gap-2"
+                            >
+                              <FolderPlus size={14} />
+                              <span>Create New</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col h-full animate-in slide-in-from-right duration-300">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/20">
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setActivePlaylistId(null)}
+                    className={`text-[10px] font-bold tracking-[0.1em] uppercase ${!activePlaylistId ? 'text-[#e8ff47]' : 'text-white/30 hover:text-white'}`}
+                  >
+                    All Playlists
+                  </button>
+                  {activePlaylistId && (
+                    <>
+                      <span className="text-white/10">/</span>
+                      <span className="text-[10px] font-bold text-[#e8ff47] tracking-[0.1em] uppercase truncate max-w-[150px]">
+                        {activePlaylist?.name}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <button 
+                  onClick={() => setIsCreatingPlaylist(true)}
+                  className="p-1.5 bg-[#e8ff47] text-black rounded-lg hover:bg-[#d4eb2e] transition-colors"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                {isCreatingPlaylist && (
+                  <div className="p-3 bg-white/5 rounded-xl mb-2 animate-in slide-in-from-top duration-200">
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Playlist name..."
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:border-[#e8ff47]"
+                      value={newPlaylistName}
+                      onChange={(e) => setNewPlaylistName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') createPlaylist(newPlaylistName);
+                        if (e.key === 'Escape') setIsCreatingPlaylist(false);
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => createPlaylist(newPlaylistName)}
+                        className="flex-1 bg-[#e8ff47] text-black py-1.5 rounded-lg text-xs font-bold"
+                      >
+                        Create
+                      </button>
+                      <button 
+                        onClick={() => setIsCreatingPlaylist(false)}
+                        className="px-3 py-1.5 bg-white/5 rounded-lg text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!activePlaylistId ? (
+                  playlists.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full py-20 opacity-30">
+                      <List size={40} className="mb-4" />
+                      <p className="text-sm">No playlists yet</p>
+                      <button 
+                        onClick={() => setIsCreatingPlaylist(true)}
+                        className="text-xs text-[#e8ff47] mt-2 underline"
+                      >
+                        Create your first
+                      </button>
+                    </div>
+                  ) : (
+                    playlists.map(p => (
+                      <div key={p.id} className="relative group">
+                        <button
+                          onClick={() => setActivePlaylistId(p.id)}
+                          className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-white/5 transition-all text-left bg-white/2"
+                        >
+                          <div className="w-12 h-12 bg-[#e8ff47]/10 rounded-xl flex items-center justify-center text-[#e8ff47]">
+                            <List size={20} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="font-bold text-sm truncate">{p.name}</h5>
+                            <p className="text-[10px] text-white/30 uppercase tracking-wider">{p.videos.length} Videos</p>
+                          </div>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('Delete this playlist?')) deletePlaylist(p.id);
+                          }}
+                          className="absolute top-4 right-4 p-2 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))
+                  )
+                ) : (
+                  <div className="animate-in fade-in duration-300">
+                    <div className="flex items-center gap-2 mb-4 px-2 pt-2">
+                      <button
+                        onClick={() => {
+                          if (activePlaylist?.videos.length) playVideo(0, 'playlists');
+                        }}
+                        className="flex-1 bg-[#e8ff47] text-black py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-[#d4eb2e]"
+                      >
+                        <PlayCircle size={16} />
+                        Play All
+                      </button>
+                      <button
+                        onClick={() => {
+                          const name = prompt('Rename playlist:', activePlaylist?.name);
+                          if (name) {
+                            setPlaylists(playlists.map(p => p.id === activePlaylistId ? { ...p, name, updatedAt: new Date().toISOString() } : p));
+                          }
+                        }}
+                        className="p-2 bg-white/5 rounded-xl hover:bg-white/10"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                    </div>
+                    
+                    {activePlaylist?.videos.length === 0 ? (
+                      <div className="py-20 text-center opacity-30">
+                        <PlayCircle size={40} className="mx-auto mb-4" />
+                        <p className="text-sm">Playlist is empty</p>
+                        <button 
+                          onClick={() => setViewMode('search')}
+                          className="text-xs text-[#e8ff47] mt-2 underline"
+                        >
+                          Find videos to add
+                        </button>
+                      </div>
+                    ) : (
+                      activePlaylist?.videos.map((video, index) => (
+                        <div key={video.id} className="relative group">
+                          <button
+                            onClick={() => playVideo(index, 'playlists')}
+                            className={`w-full flex gap-3 p-2 rounded-xl transition-all text-left hover:bg-white/5 ${
+                              playbackSource === 'playlists' && activePlaylistId === activePlaylistId && currentIndex === index 
+                                ? 'bg-[#e8ff47]/5 border border-[#e8ff47]/20' 
+                                : 'border border-transparent'
+                            }`}
+                          >
+                            <div className="relative flex-shrink-0 w-24 h-[54px] bg-black rounded-lg overflow-hidden">
+                              <img src={video.thumb} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
+                              {playbackSource === 'playlists' && currentIndex === index && (
+                                <div className="absolute inset-0 bg-[#e8ff47]/20 flex items-center justify-center text-[#e8ff47]">
+                                  <PlayCircle size={18} />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-width-0 py-0.5">
+                              <h5 className={`text-[12px] font-bold leading-tight mb-1 line-clamp-2 ${
+                                playbackSource === 'playlists' && currentIndex === index ? 'text-[#e8ff47]' : 'text-white'
+                              }`}>
+                                {video.title}
+                              </h5>
+                              <p className="text-[10px] text-white/40 truncate">{video.channel}</p>
+                            </div>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeVideoFromPlaylist(activePlaylistId!, video.id);
+                            }}
+                            className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))
                     )}
                   </div>
-                  <div className="flex-1 min-width-0">
-                    <h5 className={`text-[13px] font-bold leading-tight mb-1 line-clamp-2 ${
-                      currentIndex === index ? 'text-[#e8ff47]' : 'text-white'
-                    }`}>
-                      {video.title}
-                    </h5>
-                    <p className="text-[11px] text-white/40 truncate">{video.channel}</p>
-                    <p className="text-[10px] text-white/20 mt-1">{video.published && new Date(video.published).toLocaleDateString()}</p>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
+                )}
+              </div>
+            </div>
+          )}
         </aside>
       </main>
 

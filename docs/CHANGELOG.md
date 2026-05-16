@@ -9,9 +9,14 @@ All notable changes to the LuDashboard architecture and feature set will be docu
 - Converted LuVideo from an external iframe-based app into a native LuDashboard React + TypeScript module.
 - Implemented `LuVideoModule` at `src/modules/luvideo/` following the strict Module Contract.
 - Integrated YouTube Data API v3 for video search with quota-efficient behavior (explicit search only).
+- **Internal Playlists**: Added support for local video collections without using YouTube Playlist APIs or OAuth.
+  - CRUD operations for playlists (Create, Rename, Delete).
+  - Ability to add search results to existing or new playlists.
+  - Dedicated "Playlist Mode" for the right-side panel.
+  - Separate playback queues for Search results and Playlists.
 - Implemented a first-launch API key setup modal with local storage persistence.
 - Rebuilt the LuVideo UI with a premium dark theme, responsive player, and integrated queue management.
-- Added autoplay functionality that automatically triggers the next video in the search results.
+- Added autoplay functionality that automatically triggers the next video in the active queue (Search or Playlist).
 
 ### Architectural Impact
 - Verified the native module architecture for media-heavy components.
