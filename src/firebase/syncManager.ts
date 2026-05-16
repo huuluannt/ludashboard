@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './config';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { db, app } from './config';
 import { useUserStore } from '@/state/userStore';
 import { useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
@@ -87,13 +88,17 @@ export const queueSync = () => {
 
 export const initSyncManager = () => {
   let hydrated = false;
-  
+  let authReady = false;
+  const auth = getAuth(app);
+
   const checkHydrated = () => {
     const u = useUserStore.getState()._hydrated;
     const s = useSidebarStore.getState()._hydrated;
     const t = useTabStore.getState()._hydrated;
     const m = useModuleStore.getState()._hydrated;
-    if (u && s && t && m && !hydrated) {
+    
+    // We must wait for ALL local stores to hydrate AND Firebase Auth to resolve
+    if (u && s && t && m && authReady && !hydrated) {
       hydrated = true;
       if (useUserStore.getState().user) {
         fetchCloudConfig().then(() => {
@@ -104,6 +109,17 @@ export const initSyncManager = () => {
       }
     }
   };
+
+  onAuthStateChanged(auth, (firebaseUser) => {
+    authReady = true;
+    // If Firebase says we are logged out, but local storage says we are logged in,
+    // we should clear local storage to prevent permission errors.
+    const localUser = useUserStore.getState().user;
+    if (!firebaseUser && localUser && localUser.id !== 'demo-user') {
+      useUserStore.getState().signOut();
+    }
+    checkHydrated();
+  });
 
   useUserStore.subscribe((state, prevState) => {
     checkHydrated();

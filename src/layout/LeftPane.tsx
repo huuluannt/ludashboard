@@ -7,6 +7,8 @@ import { moduleRegistry } from '@/modules/moduleRegistry';
 import { fetchGoogleUserInfo } from '@/auth/googleAuth';
 import Icon from '@/components/Icon';
 import ImportModuleModal from '@/components/ImportModuleModal';
+import { getAuth, signInWithCredential, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
+import { app } from '@/firebase/config';
 
 export default function LeftPane() {
   const collapsed = useSidebarStore((s) => s.collapsed);
@@ -67,11 +69,19 @@ export default function LeftPane() {
   const handleGoogleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
-        const userInfo = await fetchGoogleUserInfo(tokenResponse.access_token);
-        setUser(userInfo);
+        const credential = GoogleAuthProvider.credential(null, tokenResponse.access_token);
+        const auth = getAuth(app);
+        const userCredential = await signInWithCredential(auth, credential);
+        const fbUser = userCredential.user;
+
+        setUser({
+          id: fbUser.uid,
+          name: fbUser.displayName || 'Lu User',
+          email: fbUser.email || '',
+          picture: fbUser.photoURL || '',
+        });
       } catch (err) {
-        console.error('Failed to fetch user info', err);
-        // Fallback to demo login if Google Auth is misconfigured
+        console.error('Failed to authenticate with Firebase', err);
         setUser({ id: 'demo-user', name: 'Lu Dashboard', email: 'lu@dashboard.dev', picture: '' });
       }
     },
@@ -227,6 +237,7 @@ export default function LeftPane() {
               label="Sign Out"
               onClick={() => {
                 signOut();
+                firebaseSignOut(getAuth(app)).catch(console.error);
                 setDropdownOpen(false);
               }}
               danger
