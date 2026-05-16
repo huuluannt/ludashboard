@@ -23,6 +23,9 @@ import { manifest as convertImgManifest } from './convert-img/manifest';
 import CollageImgModule from './collage-img/index';
 import { manifest as collageImgManifest } from './collage-img/manifest';
 
+import LuVideoModule from './luvideo/index';
+import { manifest as luvideoManifest } from './luvideo/manifest';
+
 // Placeholder modules
 import { placeholderManifests } from './placeholders';
 import PlaceholderModule from './PlaceholderModule';
@@ -41,6 +44,7 @@ export function setupModules() {
     { manifest: notesManifest, component: NotesModule },
     { manifest: convertImgManifest, component: ConvertImgModule },
     { manifest: collageImgManifest, component: CollageImgModule },
+    { manifest: luvideoManifest, component: LuVideoModule },
   ];
 
   for (const mod of builtInModules) {

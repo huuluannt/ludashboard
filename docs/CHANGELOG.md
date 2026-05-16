@@ -2,6 +2,23 @@
 
 All notable changes to the LuDashboard architecture and feature set will be documented in this file.
 
+## [1.4.0] - Native LuVideo Integration
+**Date:** 2026-05-17
+
+### Added
+- Converted LuVideo from an external iframe-based app into a native LuDashboard React + TypeScript module.
+- Implemented `LuVideoModule` at `src/modules/luvideo/` following the strict Module Contract.
+- Integrated YouTube Data API v3 for video search with quota-efficient behavior (explicit search only).
+- Implemented a first-launch API key setup modal with local storage persistence.
+- Rebuilt the LuVideo UI with a premium dark theme, responsive player, and integrated queue management.
+- Added autoplay functionality that automatically triggers the next video in the search results.
+
+### Architectural Impact
+- Verified the native module architecture for media-heavy components.
+- Eliminated iframe-related playback restrictions by hosting the YouTube player directly within the native module shell.
+- Maintained clean separation of concerns: LuVideo logic, state, and styles are entirely contained within its module directory.
+
+
 ## [1.3.0] - Production Deployment Readiness
 **Date:** 2026-05-17
 
