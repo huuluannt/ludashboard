@@ -3,7 +3,8 @@ import { useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
 import { useUserStore } from '@/state/userStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
-import { fetchGoogleUserInfo } from '@/auth/googleAuth';
+import { useModuleStore } from '@/state/moduleStore';
+import type { ImportedModule } from '@/state/moduleStore';
 import Icon from '@/components/Icon';
 import ImportModuleModal from '@/components/ImportModuleModal';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
@@ -25,7 +26,28 @@ export default function LeftPane() {
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [editingModule, setEditingModule] = useState<ImportedModule | null>(null);
+
+  const removeModule = useModuleStore((s) => s.removeModule);
+
+  const [time, setTime] = useState('');
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const yy = now.getFullYear().toString().slice(-2);
+      const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+      const dd = now.getDate().toString().padStart(2, '0');
+      const hh = now.getHours().toString().padStart(2, '0');
+      const min = now.getMinutes().toString().padStart(2, '0');
+      setTime(`${yy}${mm}${dd} ${hh}:${min}`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -99,9 +121,14 @@ export default function LeftPane() {
             <div className="w-8 h-8 rounded-xl bg-[var(--color-accent)] flex items-center justify-center flex-shrink-0">
               <Icon name="boxes" size={16} className="text-white" strokeWidth={2.5} />
             </div>
-            <span className="text-sm font-semibold text-[var(--color-text-primary)] whitespace-nowrap overflow-hidden">
-              LuDashboard
-            </span>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-[var(--color-text-primary)] whitespace-nowrap overflow-hidden">
+                LuDashboard
+              </span>
+              <span className="text-[10px] text-[var(--color-text-tertiary)] tracking-widest font-mono">
+                {time}
+              </span>
+            </div>
             <div className="flex-1" />
             <button
               onClick={toggleCollapsed}
@@ -132,12 +159,13 @@ export default function LeftPane() {
               className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
             />
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search modules…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="
-                w-full h-8 pl-8 pr-3 rounded-lg
+                w-full h-8 pl-8 pr-7 rounded-lg
                 bg-[var(--color-surface-muted)] border border-transparent
                 text-xs text-[var(--color-text-primary)]
                 placeholder:text-[var(--color-text-tertiary)]
@@ -145,6 +173,17 @@ export default function LeftPane() {
                 transition-colors
               "
             />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  searchInputRef.current?.focus();
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+              >
+                <Icon name="x" size={12} />
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -169,6 +208,11 @@ export default function LeftPane() {
                 isPinned
                 onOpen={() => handleOpenModule(mod)}
                 onTogglePin={() => togglePin(mod.manifest.id)}
+                onEdit={(importedMod) => {
+                  setEditingModule(importedMod);
+                  setImportModalOpen(true);
+                }}
+                onDelete={(id) => removeModule(id)}
               />
             ))}
             {!collapsed && <div className="mx-2 my-1.5 border-b border-[var(--color-border-subtle)]" />}
@@ -191,13 +235,21 @@ export default function LeftPane() {
             isPinned={false}
             onOpen={() => handleOpenModule(mod)}
             onTogglePin={() => togglePin(mod.manifest.id)}
+            onEdit={(importedMod) => {
+              setEditingModule(importedMod);
+              setImportModalOpen(true);
+            }}
+            onDelete={(id) => removeModule(id)}
           />
         ))}
 
         {/* Install Module button */}
         {!collapsed && (
           <button
-            onClick={() => setImportModalOpen(true)}
+            onClick={() => {
+              setEditingModule(null);
+              setImportModalOpen(true);
+            }}
             className="
               w-full mt-1 px-3 py-2 rounded-xl
               flex items-center gap-2.5
@@ -273,7 +325,12 @@ export default function LeftPane() {
         </button>
       </div>
 
-      {importModalOpen && <ImportModuleModal onClose={() => setImportModalOpen(false)} />}
+      {importModalOpen && (
+        <ImportModuleModal
+          onClose={() => setImportModalOpen(false)}
+          editingModule={editingModule}
+        />
+      )}
     </aside>
   );
 }
@@ -286,10 +343,27 @@ interface ModuleCardProps {
   isPinned: boolean;
   onOpen: () => void;
   onTogglePin: () => void;
+  onEdit: (mod: ImportedModule) => void;
+  onDelete: (id: string) => void;
 }
 
-function ModuleCard({ mod, collapsed, isPinned, onOpen, onTogglePin }: ModuleCardProps) {
+function ModuleCard({ mod, collapsed, isPinned, onOpen, onTogglePin, onEdit, onDelete }: ModuleCardProps) {
   const [hovering, setHovering] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const isImported = useModuleStore.getState().importedModules.some(m => m.id === mod.manifest.id);
+  const importedMod = isImported ? useModuleStore.getState().importedModules.find(m => m.id === mod.manifest.id) : null;
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    if (dropdownOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropdownOpen]);
 
   if (collapsed) {
     return (
@@ -342,13 +416,43 @@ function ModuleCard({ mod, collapsed, isPinned, onOpen, onTogglePin }: ModuleCar
         >
           <Icon name="pin" size={12} />
         </button>
-        <button
-          onClick={(e) => e.stopPropagation()}
-          className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
-          title="More options"
-        >
-          <Icon name="more-horizontal" size={12} />
-        </button>
+
+        {isImported && (
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDropdownOpen(p => !p);
+              }}
+              className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+              title="More options"
+            >
+              <Icon name="more-horizontal" size={12} />
+            </button>
+            {dropdownOpen && (
+              <div className="absolute top-full right-0 mt-1 w-32 bg-white rounded-xl border border-[var(--color-border)] shadow-lg z-50 py-1">
+                <DropdownItem 
+                  icon="edit" 
+                  label="Rename / Edit" 
+                  onClick={() => { 
+                    setDropdownOpen(false); 
+                    if (importedMod) onEdit(importedMod); 
+                  }} 
+                />
+                <div className="mx-2 my-1 border-b border-[var(--color-border-subtle)]" />
+                <DropdownItem 
+                  icon="trash" 
+                  label="Delete" 
+                  danger 
+                  onClick={() => { 
+                    setDropdownOpen(false); 
+                    onDelete(mod.manifest.id); 
+                  }} 
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

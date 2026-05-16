@@ -4,20 +4,23 @@ import { moduleRegistry } from '@/modules/moduleRegistry';
 import IframeModule from '@/modules/IframeModule';
 import Icon from './Icon';
 
+import type { ImportedModule } from '@/state/moduleStore';
+
 interface ImportModuleModalProps {
   onClose: () => void;
+  editingModule?: ImportedModule | null;
 }
 
-export default function ImportModuleModal({ onClose }: ImportModuleModalProps) {
+export default function ImportModuleModal({ onClose, editingModule }: ImportModuleModalProps) {
   const importModule = useModuleStore((s) => s.importModule);
 
-  const [title, setTitle] = useState('');
-  const [moduleId, setModuleId] = useState('');
-  const [icon, setIcon] = useState('globe');
-  const [category, setCategory] = useState('Imported');
-  const [description, setDescription] = useState('');
-  const [url, setUrl] = useState('');
-  const [offline, setOffline] = useState(false);
+  const [title, setTitle] = useState(editingModule?.title || '');
+  const [moduleId, setModuleId] = useState(editingModule?.id || '');
+  const [icon, setIcon] = useState(editingModule?.icon || 'globe');
+  const [category, setCategory] = useState(editingModule?.category || 'Imported');
+  const [description, setDescription] = useState(editingModule?.description || '');
+  const [url, setUrl] = useState(editingModule?.url || '');
+  const [offline, setOffline] = useState(editingModule?.offline || false);
 
   const handleImport = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +37,13 @@ export default function ImportModuleModal({ onClose }: ImportModuleModalProps) {
       url,
     };
 
+    // If editing and ID changed, remove old one from store and registry
+    if (editingModule && editingModule.id !== moduleId) {
+      useModuleStore.getState().removeModule(editingModule.id);
+      // We can't easily unregister from registry right now without a reload, but we can register the new one.
+      // A full page reload might be best, but we'll try to just register over it.
+    }
+
     importModule(newModule);
     
     // Register it immediately
@@ -49,7 +59,9 @@ export default function ImportModuleModal({ onClose }: ImportModuleModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         <div className="px-5 py-4 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
-          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Import Online Module</h2>
+          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+            {editingModule ? 'Edit Module' : 'Import Online Module'}
+          </h2>
           <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-subtle)] transition-colors cursor-pointer">
             <Icon name="x" size={16} />
           </button>
@@ -95,7 +107,9 @@ export default function ImportModuleModal({ onClose }: ImportModuleModalProps) {
 
           <div className="mt-2 flex justify-end gap-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)] transition-colors cursor-pointer">Cancel</button>
-            <button type="submit" className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-text-primary)] text-white hover:bg-black transition-colors cursor-pointer shadow-sm">Import</button>
+            <button type="submit" className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--color-text-primary)] text-white hover:bg-black transition-colors cursor-pointer shadow-sm">
+              {editingModule ? 'Save Changes' : 'Import'}
+            </button>
           </div>
         </form>
       </div>
