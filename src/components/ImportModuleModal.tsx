@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useModuleStore } from '@/state/moduleStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import IframeModule from '@/modules/IframeModule';
-import Icon from './Icon';
+import Icon, { availableIcons } from './Icon';
 
 import type { ImportedModule } from '@/state/moduleStore';
 
@@ -21,6 +21,19 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
   const [description, setDescription] = useState(editingModule?.description || '');
   const [url, setUrl] = useState(editingModule?.url || '');
   const [offline, setOffline] = useState(editingModule?.offline || false);
+
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const iconPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (iconPickerRef.current && !iconPickerRef.current.contains(e.target as Node)) {
+        setShowIconPicker(false);
+      }
+    };
+    if (showIconPicker) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showIconPicker]);
 
   const handleImport = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,9 +93,41 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 relative" ref={iconPickerRef}>
               <label className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Icon</label>
-              <input required value={icon} onChange={e => setIcon(e.target.value)} placeholder="e.g. globe" className="w-full h-9 px-3 rounded-lg bg-[var(--color-surface-subtle)] border border-[var(--color-border-subtle)] text-sm focus:border-[var(--color-accent)] focus:bg-white transition-colors outline-none font-mono" />
+              <button
+                type="button"
+                onClick={() => setShowIconPicker(!showIconPicker)}
+                className="w-full h-9 px-3 rounded-lg bg-[var(--color-surface-subtle)] border border-[var(--color-border-subtle)] text-sm focus:border-[var(--color-accent)] focus:bg-white transition-colors flex items-center justify-between cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Icon name={icon} size={16} className="text-[var(--color-text-secondary)]" />
+                  <span className="font-mono text-xs">{icon}</span>
+                </div>
+                <Icon name="chevron-right" size={14} className={`text-[var(--color-text-tertiary)] transition-transform ${showIconPicker ? 'rotate-90' : ''}`} />
+              </button>
+              
+              {showIconPicker && (
+                <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-xl shadow-lg border border-[var(--color-border)] p-2 z-10 grid grid-cols-5 gap-1 max-h-48 overflow-y-auto">
+                  {availableIcons.map((i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => {
+                        setIcon(i);
+                        setShowIconPicker(false);
+                      }}
+                      className={`
+                        w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors
+                        ${icon === i ? 'bg-[var(--color-accent)] text-white' : 'hover:bg-[var(--color-surface-subtle)] text-[var(--color-text-secondary)]'}
+                      `}
+                      title={i}
+                    >
+                      <Icon name={i} size={18} />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Category</label>

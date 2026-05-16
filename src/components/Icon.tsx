@@ -60,6 +60,8 @@ interface IconProps extends LucideProps {
   name: string;
 }
 
+export const availableIcons = Object.keys(iconMap);
+
 export default function Icon({ name, ...props }: IconProps) {
   const IconComponent = iconMap[name];
   if (!IconComponent) {
