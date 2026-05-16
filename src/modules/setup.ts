@@ -17,6 +17,12 @@ import { manifest as imageResizerManifest } from './image-resizer/manifest';
 import NotesModule from './notes/index';
 import { manifest as notesManifest } from './notes/manifest';
 
+import ConvertImgModule from './convert-img/index';
+import { manifest as convertImgManifest } from './convert-img/manifest';
+
+import CollageImgModule from './collage-img/index';
+import { manifest as collageImgManifest } from './collage-img/manifest';
+
 // Placeholder modules
 import { placeholderManifests } from './placeholders';
 import PlaceholderModule from './PlaceholderModule';
@@ -33,6 +39,8 @@ export function setupModules() {
     { manifest: calculatorManifest, component: CalculatorModule },
     { manifest: imageResizerManifest, component: ImageResizerModule },
     { manifest: notesManifest, component: NotesModule },
+    { manifest: convertImgManifest, component: ConvertImgModule },
+    { manifest: collageImgManifest, component: CollageImgModule },
   ];
 
   for (const mod of builtInModules) {

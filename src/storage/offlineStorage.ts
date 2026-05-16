@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   TABS: 'lu:tabs',
   ACTIVE_TAB: 'lu:activeTab',
   PINNED: 'lu:pinned',
+  MODULE_ORDER: 'lu:moduleOrder',
   SIDEBAR: 'lu:sidebar',
   USER: 'lu:user',
   IMPORTED_MODULES: 'lu:importedModules',
@@ -32,6 +33,13 @@ export const offlineStorage = {
   },
   async setPinned(ids: string[]) {
     await set(STORAGE_KEYS.PINNED, ids);
+  },
+
+  async getModuleOrder(): Promise<string[]> {
+    return (await get(STORAGE_KEYS.MODULE_ORDER)) ?? [];
+  },
+  async setModuleOrder(ids: string[]) {
+    await set(STORAGE_KEYS.MODULE_ORDER, ids);
   },
 
   async getSidebarCollapsed(): Promise<boolean> {

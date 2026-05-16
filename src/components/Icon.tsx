@@ -7,6 +7,7 @@
 import {
   Calculator,
   Image,
+  Images,
   StickyNote,
   FileText,
   Ruler,
@@ -34,6 +35,7 @@ import type { ComponentType } from 'react';
 const iconMap: Record<string, ComponentType<LucideProps>> = {
   calculator: Calculator,
   image: Image,
+  images: Images,
   'sticky-note': StickyNote,
   'file-text': FileText,
   ruler: Ruler,
@@ -63,6 +65,18 @@ interface IconProps extends LucideProps {
 export const availableIcons = Object.keys(iconMap);
 
 export default function Icon({ name, ...props }: IconProps) {
+  if (name.startsWith('data:image/')) {
+    const { size = 16, className } = props;
+    return (
+      <img
+        src={name}
+        alt=""
+        className={`object-contain ${className ?? ''}`}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
   const IconComponent = iconMap[name];
   if (!IconComponent) {
     return <Package {...props} />;

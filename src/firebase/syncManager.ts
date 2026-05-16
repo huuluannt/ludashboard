@@ -20,6 +20,10 @@ const mergeState = (remote: any) => {
     useSidebarStore.setState({ pinnedModuleIds: remote.pinnedModuleIds });
     offlineStorage.setPinned(remote.pinnedModuleIds);
   }
+  if (remote.moduleOrderIds) {
+    useSidebarStore.setState({ moduleOrderIds: remote.moduleOrderIds });
+    offlineStorage.setModuleOrder(remote.moduleOrderIds);
+  }
   if (remote.openTabs) {
     useTabStore.setState({ tabs: remote.openTabs });
     offlineStorage.setTabs(remote.openTabs);
@@ -38,6 +42,7 @@ const getLocalState = () => {
   return {
     importedModules: useModuleStore.getState().importedModules,
     pinnedModuleIds: useSidebarStore.getState().pinnedModuleIds,
+    moduleOrderIds: useSidebarStore.getState().moduleOrderIds,
     openTabs: useTabStore.getState().tabs,
     activeTabId: useTabStore.getState().activeTabId,
     sidebarCollapsed: useSidebarStore.getState().collapsed,

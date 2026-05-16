@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import type { DragEvent } from 'react';
 import { useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
 import { useUserStore } from '@/state/userStore';
@@ -10,13 +11,20 @@ import ImportModuleModal from '@/components/ImportModuleModal';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
 import { app } from '@/firebase/config';
 
+const HOME_URL = 'https://ludashboard.vercel.app/';
+const SIDEBAR_EXPANDED_WIDTH = 228;
+const SIDEBAR_COLLAPSED_WIDTH = 56;
+const VIETNAMESE_DAYS = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+
 export default function LeftPane() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
   const searchQuery = useSidebarStore((s) => s.searchQuery);
   const setSearchQuery = useSidebarStore((s) => s.setSearchQuery);
   const pinnedModuleIds = useSidebarStore((s) => s.pinnedModuleIds);
+  const moduleOrderIds = useSidebarStore((s) => s.moduleOrderIds);
   const togglePin = useSidebarStore((s) => s.togglePin);
+  const setModuleOrder = useSidebarStore((s) => s.setModuleOrder);
 
   const openTab = useTabStore((s) => s.openTab);
 
@@ -30,7 +38,9 @@ export default function LeftPane() {
   
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [editingModule, setEditingModule] = useState<ImportedModule | null>(null);
+  const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
 
+  const importedModules = useModuleStore((s) => s.importedModules);
   const removeModule = useModuleStore((s) => s.removeModule);
 
   const [time, setTime] = useState('');
@@ -42,7 +52,7 @@ export default function LeftPane() {
       const dd = now.getDate().toString().padStart(2, '0');
       const hh = now.getHours().toString().padStart(2, '0');
       const min = now.getMinutes().toString().padStart(2, '0');
-      setTime(`${yy}${mm}${dd} ${hh}:${min}`);
+      setTime(`${yy}${mm}${dd} ${VIETNAMESE_DAYS[now.getDay()]} ${hh}:${min}`);
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -62,22 +72,54 @@ export default function LeftPane() {
 
   const allModules = moduleRegistry.getAll();
 
+  const importedModuleMap = useMemo(
+    () => new Map(importedModules.map((m) => [m.id, m])),
+    [importedModules],
+  );
+
+  const orderedModules = useMemo(() => {
+    const orderIndex = new Map(moduleOrderIds.map((id, index) => [id, index]));
+    return [...allModules].sort((a, b) => {
+      const aIndex = orderIndex.get(a.manifest.id);
+      const bIndex = orderIndex.get(b.manifest.id);
+
+      if (aIndex != null && bIndex != null) return aIndex - bIndex;
+      if (aIndex != null) return -1;
+      if (bIndex != null) return 1;
+      return 0;
+    });
+  }, [allModules, moduleOrderIds]);
+
   // Filter & sort: pinned first, then search
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
-    let list = allModules;
+    const q = searchQuery.trim();
+    let list = orderedModules;
     if (q) {
-      list = list.filter(
-        (m) =>
-          m.manifest.title.toLowerCase().includes(q) ||
-          m.manifest.category.toLowerCase().includes(q) ||
-          m.manifest.description.toLowerCase().includes(q),
-      );
+      list = orderedModules
+        .map((mod, index) => ({
+          mod,
+          index,
+          score: getSearchScore(
+            `${mod.manifest.title} ${mod.manifest.category} ${mod.manifest.description}`,
+            q,
+          ),
+        }))
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score || a.index - b.index)
+        .map((item) => item.mod);
     }
     const pinned = list.filter((m) => pinnedModuleIds.includes(m.manifest.id));
     const unpinned = list.filter((m) => !pinnedModuleIds.includes(m.manifest.id));
     return { pinned, unpinned };
-  }, [allModules, searchQuery, pinnedModuleIds]);
+  }, [orderedModules, searchQuery, pinnedModuleIds]);
+
+  const handleLogoReload = () => {
+    if (window.location.href === HOME_URL) {
+      window.location.reload();
+      return;
+    }
+    window.location.assign(HOME_URL);
+  };
 
   const handleOpenModule = (mod: (typeof allModules)[0]) => {
     openTab({
@@ -85,6 +127,24 @@ export default function LeftPane() {
       title: mod.manifest.title,
       icon: mod.manifest.icon,
     });
+  };
+
+  const handleReorderModules = (targetModuleId: string) => {
+    if (!draggedModuleId || draggedModuleId === targetModuleId) return;
+
+    const draggedIsPinned = pinnedModuleIds.includes(draggedModuleId);
+    const targetIsPinned = pinnedModuleIds.includes(targetModuleId);
+    if (draggedIsPinned !== targetIsPinned) return;
+
+    const currentOrder = orderedModules.map((mod) => mod.manifest.id);
+    const from = currentOrder.indexOf(draggedModuleId);
+    const to = currentOrder.indexOf(targetModuleId);
+    if (from === -1 || to === -1) return;
+
+    const nextOrder = [...currentOrder];
+    const [moved] = nextOrder.splice(from, 1);
+    nextOrder.splice(to, 0, moved);
+    setModuleOrder(nextOrder);
   };
 
   const handleGoogleLogin = async () => {
@@ -112,23 +172,30 @@ export default function LeftPane() {
         bg-[var(--color-surface-subtle)] border-r border-[var(--color-border-subtle)]
         select-none overflow-hidden flex-shrink-0
       `}
-      style={{ width: collapsed ? 60 : 260 }}
+      style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
     >
       {/* ─── Brand Area ─── */}
       <div className={`flex items-center h-14 px-3 gap-2.5 flex-shrink-0 ${collapsed ? 'justify-center' : ''}`}>
         {!collapsed ? (
           <>
-            <div className="w-8 h-8 rounded-xl bg-[var(--color-accent)] flex items-center justify-center flex-shrink-0">
-              <Icon name="boxes" size={16} className="text-white" strokeWidth={2.5} />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-[var(--color-text-primary)] whitespace-nowrap overflow-hidden">
-                LuDashboard
-              </span>
-              <span className="text-[10px] text-[var(--color-text-tertiary)] tracking-widest font-mono">
-                {time}
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={handleLogoReload}
+              className="flex items-center gap-2.5 min-w-0 rounded-xl -ml-1 px-1 py-1 hover:bg-[var(--color-surface-muted)] active:scale-[0.98] transition-all cursor-pointer"
+              title="Reload LuDashboard"
+            >
+              <div className="w-8 h-8 rounded-xl bg-[var(--color-accent)] flex items-center justify-center flex-shrink-0">
+                <Icon name="boxes" size={21} className="text-white" strokeWidth={2.35} />
+              </div>
+              <div className="flex flex-col text-left min-w-0">
+                <span className="text-sm font-semibold text-[var(--color-text-primary)] whitespace-nowrap overflow-hidden">
+                  LuDashboard
+                </span>
+                <span className="text-[10px] text-[var(--color-accent)] tracking-widest font-mono">
+                  {time}
+                </span>
+              </div>
+            </button>
             <div className="flex-1" />
             <button
               onClick={toggleCollapsed}
@@ -206,8 +273,13 @@ export default function LeftPane() {
                 mod={mod}
                 collapsed={collapsed}
                 isPinned
+                importedMod={importedModuleMap.get(mod.manifest.id) ?? null}
+                isDragging={draggedModuleId === mod.manifest.id}
                 onOpen={() => handleOpenModule(mod)}
                 onTogglePin={() => togglePin(mod.manifest.id)}
+                onDragStart={() => setDraggedModuleId(mod.manifest.id)}
+                onDragEnd={() => setDraggedModuleId(null)}
+                onDrop={() => handleReorderModules(mod.manifest.id)}
                 onEdit={(importedMod) => {
                   setEditingModule(importedMod);
                   setImportModalOpen(true);
@@ -233,8 +305,13 @@ export default function LeftPane() {
             mod={mod}
             collapsed={collapsed}
             isPinned={false}
+            importedMod={importedModuleMap.get(mod.manifest.id) ?? null}
+            isDragging={draggedModuleId === mod.manifest.id}
             onOpen={() => handleOpenModule(mod)}
             onTogglePin={() => togglePin(mod.manifest.id)}
+            onDragStart={() => setDraggedModuleId(mod.manifest.id)}
+            onDragEnd={() => setDraggedModuleId(null)}
+            onDrop={() => handleReorderModules(mod.manifest.id)}
             onEdit={(importedMod) => {
               setEditingModule(importedMod);
               setImportModalOpen(true);
@@ -341,19 +418,37 @@ interface ModuleCardProps {
   mod: ReturnType<typeof moduleRegistry.getAll>[0];
   collapsed: boolean;
   isPinned: boolean;
+  importedMod: ImportedModule | null;
+  isDragging: boolean;
   onOpen: () => void;
   onTogglePin: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDrop: () => void;
   onEdit: (mod: ImportedModule) => void;
   onDelete: (id: string) => void;
 }
 
-function ModuleCard({ mod, collapsed, isPinned, onOpen, onTogglePin, onEdit, onDelete }: ModuleCardProps) {
+function ModuleCard({
+  mod,
+  collapsed,
+  isPinned,
+  importedMod,
+  isDragging,
+  onOpen,
+  onTogglePin,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+  onEdit,
+  onDelete,
+}: ModuleCardProps) {
   const [hovering, setHovering] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const isImported = useModuleStore.getState().importedModules.some(m => m.id === mod.manifest.id);
-  const importedMod = isImported ? useModuleStore.getState().importedModules.find(m => m.id === mod.manifest.id) : null;
+  const isImported = importedMod != null;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -365,18 +460,51 @@ function ModuleCard({ mod, collapsed, isPinned, onOpen, onTogglePin, onEdit, onD
     return () => document.removeEventListener('mousedown', handler);
   }, [dropdownOpen]);
 
+  const handleDragStart = (e: DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', mod.manifest.id);
+    onDragStart();
+  };
+
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOver(true);
+  };
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    onDrop();
+    onDragEnd();
+  };
+
+  const handleDragEnd = () => {
+    setDragOver(false);
+    onDragEnd();
+  };
+
   if (collapsed) {
     return (
       <button
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onDragEnd={handleDragEnd}
         onClick={onOpen}
         title={mod.manifest.title}
-        className="
+        className={`
           w-full flex items-center justify-center py-2
-          rounded-xl module-card cursor-pointer
-        "
+          rounded-xl module-card cursor-grab active:cursor-grabbing
+          ${isDragging ? 'opacity-45' : ''}
+          ${dragOver ? 'bg-[var(--color-surface-muted)]' : ''}
+        `}
       >
         <div className="w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center">
-          <Icon name={mod.manifest.icon} size={15} className="text-[var(--color-text-secondary)]" />
+          <Icon name={mod.manifest.icon} size={20} className="text-[var(--color-text-secondary)]" />
         </div>
       </button>
     );
@@ -384,13 +512,24 @@ function ModuleCard({ mod, collapsed, isPinned, onOpen, onTogglePin, onEdit, onD
 
   return (
     <div
-      className="module-card flex items-center gap-2.5 px-2 py-1.5 rounded-xl cursor-pointer group"
+      draggable
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+      onDragEnd={handleDragEnd}
+      className={`
+        module-card flex items-center gap-2.5 px-2 py-1.5 rounded-xl
+        cursor-grab active:cursor-grabbing group transition-all
+        ${isDragging ? 'opacity-45' : ''}
+        ${dragOver ? 'bg-[var(--color-surface-muted)] ring-1 ring-[var(--color-accent)]/25' : ''}
+      `}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
       onClick={onOpen}
     >
       <div className="w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center flex-shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-        <Icon name={mod.manifest.icon} size={15} className="text-[var(--color-text-secondary)]" />
+        <Icon name={mod.manifest.icon} size={20} className="text-[var(--color-text-secondary)]" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{mod.manifest.title}</p>
@@ -488,4 +627,58 @@ function DropdownItem({
       {label}
     </button>
   );
+}
+
+function normalizeForSearch(value: string) {
+  return value
+    .toLocaleLowerCase('vi-VN')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getSearchTerms(value: string) {
+  return value.split(' ').map((term) => term.trim()).filter(Boolean);
+}
+
+function getSearchScore(text: string, query: string) {
+  const originalText = text.toLocaleLowerCase('vi-VN').replace(/\s+/g, ' ').trim();
+  const originalQuery = query.toLocaleLowerCase('vi-VN').replace(/\s+/g, ' ').trim();
+  const normalizedText = normalizeForSearch(text);
+  const normalizedQuery = normalizeForSearch(query);
+
+  if (!normalizedQuery) return 1;
+
+  let score = 0;
+  const exactPhraseIndex = originalText.indexOf(originalQuery);
+  const foldedPhraseIndex = normalizedText.indexOf(normalizedQuery);
+
+  if (exactPhraseIndex >= 0) {
+    score = Math.max(score, 1000 - exactPhraseIndex);
+  }
+
+  if (foldedPhraseIndex >= 0) {
+    score = Math.max(score, 800 - foldedPhraseIndex);
+  }
+
+  const originalTerms = getSearchTerms(originalQuery);
+  const normalizedTerms = getSearchTerms(normalizedQuery);
+  const exactTermMatches = originalTerms.filter((term) => originalText.includes(term)).length;
+  const foldedTermMatches = normalizedTerms.filter((term) => normalizedText.includes(term)).length;
+
+  if (originalTerms.length > 0 && exactTermMatches === originalTerms.length) {
+    score = Math.max(score, 650 + exactTermMatches * 10);
+  }
+
+  if (normalizedTerms.length > 0 && foldedTermMatches === normalizedTerms.length) {
+    score = Math.max(score, 500 + foldedTermMatches * 10);
+  }
+
+  if (foldedTermMatches > 0) {
+    score = Math.max(score, foldedTermMatches * 100);
+  }
+
+  return score;
 }

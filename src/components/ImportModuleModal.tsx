@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { useModuleStore } from '@/state/moduleStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import IframeModule from '@/modules/IframeModule';
 import Icon, { availableIcons } from './Icon';
 
 import type { ImportedModule } from '@/state/moduleStore';
+
+const MAX_ICON_SIZE = 512 * 1024;
 
 interface ImportModuleModalProps {
   onClose: () => void;
@@ -23,7 +26,9 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
   const [offline, setOffline] = useState(editingModule?.offline || false);
 
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [iconUploadError, setIconUploadError] = useState('');
   const iconPickerRef = useRef<HTMLDivElement>(null);
+  const iconFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -35,7 +40,34 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
     return () => document.removeEventListener('mousedown', handler);
   }, [showIconPicker]);
 
-  const handleImport = (e: React.FormEvent) => {
+  const handleIconUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setIconUploadError('Please choose an image file.');
+      return;
+    }
+
+    if (file.size > MAX_ICON_SIZE) {
+      setIconUploadError('Icon file must be under 512 KB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setIcon(reader.result);
+        setIconUploadError('');
+        setShowIconPicker(false);
+      }
+    };
+    reader.onerror = () => setIconUploadError('Could not read that icon file.');
+    reader.readAsDataURL(file);
+  };
+
+  const handleImport = (e: FormEvent) => {
     e.preventDefault();
     if (!title || !moduleId || !url) return;
 
@@ -53,12 +85,14 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
     // If editing and ID changed, remove old one from store and registry
     if (editingModule && editingModule.id !== moduleId) {
       useModuleStore.getState().removeModule(editingModule.id);
-      // We can't easily unregister from registry right now without a reload, but we can register the new one.
-      // A full page reload might be best, but we'll try to just register over it.
     }
 
     importModule(newModule);
     
+    if (editingModule) {
+      moduleRegistry.unregister(editingModule.id);
+    }
+
     // Register it immediately
     moduleRegistry.register({
       manifest: newModule,
@@ -67,6 +101,8 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
 
     onClose();
   };
+
+  const iconLabel = icon.startsWith('data:image/') ? 'custom icon' : icon;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -100,15 +136,46 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
                 onClick={() => setShowIconPicker(!showIconPicker)}
                 className="w-full h-9 px-3 rounded-lg bg-[var(--color-surface-subtle)] border border-[var(--color-border-subtle)] text-sm focus:border-[var(--color-accent)] focus:bg-white transition-colors flex items-center justify-between cursor-pointer"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <Icon name={icon} size={16} className="text-[var(--color-text-secondary)]" />
-                  <span className="font-mono text-xs">{icon}</span>
+                  <span className="font-mono text-xs truncate">{iconLabel}</span>
                 </div>
                 <Icon name="chevron-right" size={14} className={`text-[var(--color-text-tertiary)] transition-transform ${showIconPicker ? 'rotate-90' : ''}`} />
               </button>
               
               {showIconPicker && (
                 <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-xl shadow-lg border border-[var(--color-border)] p-2 z-10 grid grid-cols-5 gap-1 max-h-48 overflow-y-auto">
+                  <div className="col-span-5 pb-1 mb-1 border-b border-[var(--color-border-subtle)]">
+                    <button
+                      type="button"
+                      onClick={() => iconFileInputRef.current?.click()}
+                      className="w-full h-9 rounded-lg flex items-center justify-center gap-2 text-[11px] font-semibold tracking-wide text-[var(--color-accent)] hover:bg-[var(--color-surface-subtle)] transition-colors cursor-pointer"
+                    >
+                      <Icon name="plus" size={14} />
+                      ADD ICON
+                    </button>
+                    <input
+                      ref={iconFileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      className="hidden"
+                      onChange={handleIconUpload}
+                    />
+                    {iconUploadError && (
+                      <p className="mt-1 text-[10px] text-[var(--color-danger)] text-center">
+                        {iconUploadError}
+                      </p>
+                    )}
+                  </div>
+                  {icon.startsWith('data:image/') && (
+                    <button
+                      type="button"
+                      className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer bg-[var(--color-accent)] text-white"
+                      title="Custom uploaded icon"
+                    >
+                      <Icon name={icon} size={20} />
+                    </button>
+                  )}
                   {availableIcons.map((i) => (
                     <button
                       key={i}

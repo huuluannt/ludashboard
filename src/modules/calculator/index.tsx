@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 export default function CalculatorModule() {
   const [display, setDisplay] = useState('0');
@@ -57,7 +57,7 @@ export default function CalculatorModule() {
       } else if (operator) {
         const result = calculate(prevValue, current, operator);
         setPrevValue(result);
-        setDisplay(String(result));
+        setDisplay(formatResult(result));
       }
 
       setOperator(nextOp);
@@ -70,11 +70,27 @@ export default function CalculatorModule() {
     if (operator == null || prevValue == null) return;
     const current = parseFloat(display);
     const result = calculate(prevValue, current, operator);
-    setDisplay(String(result));
+    setDisplay(formatResult(result));
     setPrevValue(null);
     setOperator(null);
     setWaitingForOperand(true);
   }, [display, prevValue, operator]);
+
+  const realtimeDisplay = useMemo(() => {
+    if (operator == null || prevValue == null || waitingForOperand) return display;
+
+    const current = parseFloat(display);
+    if (Number.isNaN(current)) return display;
+
+    return formatResult(calculate(prevValue, current, operator));
+  }, [display, prevValue, operator, waitingForOperand]);
+
+  const expressionDisplay = useMemo(() => {
+    if (prevValue == null || operator == null) return '';
+    return waitingForOperand
+      ? `${prevValue} ${operatorSymbol(operator)}`
+      : `${prevValue} ${operatorSymbol(operator)} ${display}`;
+  }, [display, prevValue, operator, waitingForOperand]);
 
   const buttons = [
     { label: 'AC', action: clearAll, className: 'bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)] font-medium' },
@@ -104,15 +120,13 @@ export default function CalculatorModule() {
         {/* Display */}
         <div className="bg-[var(--color-surface-subtle)] rounded-2xl p-6 mb-4 text-right border border-[var(--color-border-subtle)]">
           <div className="text-xs text-[var(--color-text-tertiary)] h-5 mb-1">
-            {prevValue != null && operator
-              ? `${prevValue} ${operatorSymbol(operator)}`
-              : ''}
+            {expressionDisplay}
           </div>
           <div
             className="text-4xl font-light tracking-tight text-[var(--color-text-primary)] overflow-hidden"
-            style={{ fontSize: display.length > 10 ? '1.5rem' : display.length > 7 ? '2rem' : '2.25rem' }}
+            style={{ fontSize: realtimeDisplay.length > 10 ? '1.5rem' : realtimeDisplay.length > 7 ? '2rem' : '2.25rem' }}
           >
-            {display}
+            {realtimeDisplay}
           </div>
         </div>
 
@@ -147,6 +161,11 @@ function calculate(a: number, b: number, op: string): number {
     case '/': return b !== 0 ? a / b : 0;
     default: return b;
   }
+}
+
+function formatResult(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  return String(Number.parseFloat(value.toPrecision(12)));
 }
 
 function operatorSymbol(op: string): string {
