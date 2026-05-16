@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useGoogleLogin } from '@react-oauth/google';
 import { useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
 import { useUserStore } from '@/state/userStore';
@@ -7,7 +6,7 @@ import { moduleRegistry } from '@/modules/moduleRegistry';
 import { fetchGoogleUserInfo } from '@/auth/googleAuth';
 import Icon from '@/components/Icon';
 import ImportModuleModal from '@/components/ImportModuleModal';
-import { getAuth, signInWithCredential, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
 import { app } from '@/firebase/config';
 
 export default function LeftPane() {
@@ -66,31 +65,23 @@ export default function LeftPane() {
     });
   };
 
-  const handleGoogleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      try {
-        const credential = GoogleAuthProvider.credential(null, tokenResponse.access_token);
-        const auth = getAuth(app);
-        const userCredential = await signInWithCredential(auth, credential);
-        const fbUser = userCredential.user;
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const auth = getAuth(app);
+      const userCredential = await signInWithPopup(auth, provider);
+      const fbUser = userCredential.user;
 
-        setUser({
-          id: fbUser.uid,
-          name: fbUser.displayName || 'Lu User',
-          email: fbUser.email || '',
-          picture: fbUser.photoURL || '',
-        });
-      } catch (err) {
-        console.error('Failed to authenticate with Firebase', err);
-        setUser({ id: 'demo-user', name: 'Lu Dashboard', email: 'lu@dashboard.dev', picture: '' });
-      }
-    },
-    onError: () => {
-      console.error('Login Failed');
-      // Fallback to demo login if it fails
-      setUser({ id: 'demo-user', name: 'Lu Dashboard', email: 'lu@dashboard.dev', picture: '' });
-    },
-  });
+      setUser({
+        id: fbUser.uid,
+        name: fbUser.displayName || 'Lu User',
+        email: fbUser.email || '',
+        picture: fbUser.photoURL || '',
+      });
+    } catch (err) {
+      console.error('Failed to authenticate with Firebase', err);
+    }
+  };
 
   return (
     <aside
