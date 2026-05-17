@@ -3,6 +3,7 @@ import { useTabStore } from '@/state/tabStore';
 import { useModuleStore } from '@/state/moduleStore';
 import { useRightSidebarStore } from '@/state/rightSidebarStore';
 import Icon from '@/components/Icon';
+import QuickNoteButton from '@/layout/QuickNoteButton';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import { openModuleFromShell } from '@/modules/openModule';
 
@@ -90,25 +91,6 @@ export default function TopRightPane() {
         })}
       </div>
 
-      {/* Quick right sidebar */}
-      <div className="flex-shrink-0 px-0.5 pb-1">
-        <button
-          type="button"
-          onClick={toggleRightSidebar}
-          className={`
-            w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer
-            ${
-              rightSidebarVisible
-                ? 'bg-white text-[var(--color-accent)] border border-[var(--color-border-subtle)] shadow-sm'
-                : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-secondary)]'
-            }
-          `}
-          title={rightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
-        >
-          <Icon name={rightSidebarVisible ? 'panel-right-close' : 'panel-right-open'} size={15} />
-        </button>
-      </div>
-
       {/* Add tab button */}
       <div className="flex-shrink-0 px-1 pb-1 relative" ref={pickerRef}>
         <button
@@ -145,6 +127,27 @@ export default function TopRightPane() {
             </div>
           </>
         )}
+      </div>
+
+      <QuickNoteButton />
+
+      {/* Quick right sidebar */}
+      <div className="flex-shrink-0 px-0.5 pb-1">
+        <button
+          type="button"
+          onClick={toggleRightSidebar}
+          className={`
+            w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer
+            ${
+              rightSidebarVisible
+                ? 'bg-white text-[var(--color-accent)] border border-[var(--color-border-subtle)] shadow-sm'
+                : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-secondary)]'
+            }
+          `}
+          title={rightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
+        >
+          <Icon name={rightSidebarVisible ? 'panel-right-close' : 'panel-right-open'} size={15} />
+        </button>
       </div>
     </div>
   );

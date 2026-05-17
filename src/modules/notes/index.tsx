@@ -1,63 +1,133 @@
-import { useState, useEffect, useCallback } from 'react';
-import { get, set } from 'idb-keyval';
-
-interface Note {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: number;
-  updatedAt: number;
-  color: string;
-}
-
-const STORAGE_KEY = 'lu:module:notes';
-const COLORS = ['#ffffff', '#fff3e0', '#e8f5e9', '#e3f2fd', '#fce4ec', '#f3e5f5', '#fff8e1'];
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { saveModuleCloudData, subscribeModuleCloudData } from '@/firebase/moduleCloudSync';
+import {
+  createBlankNote,
+  emitNotesChanged,
+  loadNotesSnapshot,
+  NOTE_COLORS,
+  NOTES_CHANGED_EVENT,
+  NotesCloudValue,
+  NotesSnapshot,
+  normalizeNotes,
+  Note,
+  saveNotesSnapshot,
+} from './noteStorage';
 
 export default function NotesModule() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [notesUpdatedAt, setNotesUpdatedAt] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
+  const activeIdRef = useRef(activeId);
+  const notesUpdatedAtRef = useRef(0);
+  const applyingRemoteRef = useRef(false);
+
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
 
   // Load from IndexedDB
   useEffect(() => {
-    get(STORAGE_KEY).then((stored: Note[] | undefined) => {
-      if (stored) setNotes(stored);
+    loadNotesSnapshot().then((snapshot) => {
+      notesUpdatedAtRef.current = snapshot.updatedAt;
+      setNotes(snapshot.notes);
+      setNotesUpdatedAt(snapshot.updatedAt);
       setLoaded(true);
     });
-  }, []);
+  }, [notesUpdatedAtRef]);
+
+  useEffect(() => {
+    if (!loaded) return undefined;
+
+    return subscribeModuleCloudData<NotesCloudValue>('notes', 'notes', {
+      onData: (remote) => {
+        if (remote.updatedAt <= notesUpdatedAtRef.current) return;
+
+        const remoteNotes = normalizeNotes(remote.value.notes);
+        applyingRemoteRef.current = true;
+        notesUpdatedAtRef.current = remote.updatedAt;
+        setNotes(remoteNotes);
+        setNotesUpdatedAt(remote.updatedAt);
+        saveNotesSnapshot(remoteNotes, remote.updatedAt);
+        if (activeIdRef.current && !remoteNotes.some((note) => note.id === activeIdRef.current)) {
+          setActiveId(null);
+        }
+
+        window.setTimeout(() => {
+          applyingRemoteRef.current = false;
+        }, 0);
+      },
+      onReady: () => setCloudReady(true),
+    });
+  }, [loaded]);
+
+  useEffect(() => {
+    const handleExternalNotesChange = (event: Event) => {
+      const snapshot = (event as CustomEvent<NotesSnapshot>).detail;
+      if (!snapshot || snapshot.updatedAt <= notesUpdatedAtRef.current) return;
+
+      notesUpdatedAtRef.current = snapshot.updatedAt;
+      setNotes(normalizeNotes(snapshot.notes));
+      setNotesUpdatedAt(snapshot.updatedAt);
+    };
+
+    window.addEventListener(NOTES_CHANGED_EVENT, handleExternalNotesChange);
+    return () => window.removeEventListener(NOTES_CHANGED_EVENT, handleExternalNotesChange);
+  }, [notesUpdatedAtRef]);
 
   // Persist on change
   useEffect(() => {
-    if (loaded) set(STORAGE_KEY, notes);
-  }, [notes, loaded]);
+    if (!loaded) return;
+    saveNotesSnapshot(notes, notesUpdatedAt);
+    if (!cloudReady || applyingRemoteRef.current || notesUpdatedAt <= 0) return;
+
+    const syncTimer = window.setTimeout(() => {
+      saveModuleCloudData<NotesCloudValue>('notes', 'notes', {
+        value: { notes },
+        updatedAt: notesUpdatedAt,
+      }).catch((error) => {
+        console.error('Failed to sync Notes', error);
+      });
+    }, 600);
+
+    return () => window.clearTimeout(syncTimer);
+  }, [notes, notesUpdatedAt, loaded, cloudReady, applyingRemoteRef]);
 
   const activeNote = notes.find((n) => n.id === activeId) ?? null;
 
+  const commitNotes = useCallback(
+    (updater: Note[] | ((current: Note[]) => Note[])) => {
+      const updatedAt = Date.now();
+      notesUpdatedAtRef.current = updatedAt;
+      setNotes((current) => {
+        const next = typeof updater === 'function' ? updater(current) : updater;
+        emitNotesChanged({ notes: next, updatedAt });
+        return next;
+      });
+      setNotesUpdatedAt(updatedAt);
+    },
+    [notesUpdatedAtRef],
+  );
+
   const createNote = useCallback(() => {
-    const note: Note = {
-      id: crypto.randomUUID(),
-      title: '',
-      content: '',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      color: COLORS[0],
-    };
-    setNotes((prev) => [note, ...prev]);
+    const note = createBlankNote();
+    commitNotes((prev) => [note, ...prev]);
     setActiveId(note.id);
-  }, []);
+  }, [commitNotes]);
 
   const updateNote = useCallback((id: string, updates: Partial<Note>) => {
-    setNotes((prev) =>
+    commitNotes((prev) =>
       prev.map((n) => (n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n)),
     );
-  }, []);
+  }, [commitNotes]);
 
   const deleteNote = useCallback(
     (id: string) => {
-      setNotes((prev) => prev.filter((n) => n.id !== id));
+      commitNotes((prev) => prev.filter((n) => n.id !== id));
       if (activeId === id) setActiveId(null);
     },
-    [activeId],
+    [activeId, commitNotes],
   );
 
   return (
@@ -123,7 +193,7 @@ export default function NotesModule() {
             {/* Editor toolbar */}
             <div className="px-6 py-3 border-b border-[var(--color-border-subtle)] flex items-center gap-3">
               <div className="flex gap-1">
-                {COLORS.map((c) => (
+                {NOTE_COLORS.map((c) => (
                   <button
                     key={c}
                     onClick={() => updateNote(activeNote.id, { color: c })}

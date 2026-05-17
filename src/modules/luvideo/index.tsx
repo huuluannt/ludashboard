@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Search, PlayCircle, SkipBack, SkipForward, Repeat, X, Key, Info, 
-  ExternalLink, List, Plus, Trash2, Edit2, Check, MoreVertical, FolderPlus
+  ExternalLink, List, Plus, Trash2, Edit2, Check, FolderPlus, ArrowUp, ArrowDown
 } from 'lucide-react';
 import Icon from '@/components/Icon';
 import { saveModuleCloudData, subscribeModuleCloudData } from '@/firebase/moduleCloudSync';
@@ -12,10 +12,12 @@ const STORAGE_KEY = 'luvideo_api_key';
 const AUTOPLAY_KEY = 'luvideo_autoplay';
 const PLAYLISTS_KEY = 'luvideo_playlists';
 const PLAYLISTS_UPDATED_AT_KEY = 'luvideo_playlists_updated_at';
+const ACTIVE_PLAYLIST_KEY = 'luvideo_active_playlist';
 const DEFAULT_QUERY = 'trending music';
 
 interface LuVideoPlaylistsCloudValue {
   playlists: Playlist[];
+  activePlaylistId?: string | null;
 }
 
 declare global {
@@ -38,11 +40,14 @@ export default function LuVideoModule() {
   const [isSearching, setIsSearching] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ytReady, setYtReady] = useState(Boolean(window.YT?.Player));
 
   // Playlist Mode States
-  const [viewMode, setViewMode] = useState<'search' | 'playlists'>('search');
+  const [viewMode, setViewMode] = useState<'search' | 'playlists'>(() =>
+    loadStoredActivePlaylistId() ? 'playlists' : 'search',
+  );
   const [playbackSource, setPlaybackSource] = useState<'search' | 'playlists'>('search');
-  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
+  const [activePlaylistId, setActivePlaylistIdState] = useState<string | null>(loadStoredActivePlaylistId);
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [showAddMenu, setShowAddMenu] = useState<string | null>(null); // videoId
@@ -50,6 +55,8 @@ export default function LuVideoModule() {
   const playerRef = useRef<any>(null);
   const ytApiLoaded = useRef(false);
   const playlistsUpdatedAtRef = useRef(playlistsUpdatedAt);
+  const activePlaylistIdRef = useRef(activePlaylistId);
+  const initialPlaylistStartedRef = useRef(false);
   const applyingRemotePlaylistsRef = useRef(false);
 
   // Persistence
@@ -58,20 +65,52 @@ export default function LuVideoModule() {
   }, [playlistsUpdatedAt]);
 
   useEffect(() => {
+    activePlaylistIdRef.current = activePlaylistId;
+    if (activePlaylistId) {
+      localStorage.setItem(ACTIVE_PLAYLIST_KEY, activePlaylistId);
+    } else {
+      localStorage.removeItem(ACTIVE_PLAYLIST_KEY);
+    }
+  }, [activePlaylistId]);
+
+  const selectPlaylist = useCallback((playlistId: string | null, sync = true) => {
+    activePlaylistIdRef.current = playlistId;
+    setActivePlaylistIdState(playlistId);
+    if (!sync) return;
+
+    const updatedAt = Date.now();
+    playlistsUpdatedAtRef.current = updatedAt;
+    setPlaylistsUpdatedAt(updatedAt);
+  }, []);
+
+  useEffect(() => {
     return subscribeModuleCloudData<LuVideoPlaylistsCloudValue>('luvideo', 'playlists', {
       onData: (remote) => {
         if (remote.updatedAt <= playlistsUpdatedAtRef.current) return;
 
         const remotePlaylists = Array.isArray(remote.value.playlists) ? remote.value.playlists : [];
+        const hasRemoteActivePlaylist = Object.prototype.hasOwnProperty.call(remote.value, 'activePlaylistId');
+        let nextActivePlaylistId = hasRemoteActivePlaylist
+          ? remote.value.activePlaylistId ?? null
+          : activePlaylistIdRef.current;
+
+        if (nextActivePlaylistId && !remotePlaylists.some((playlist) => playlist.id === nextActivePlaylistId)) {
+          nextActivePlaylistId = null;
+        }
+
         applyingRemotePlaylistsRef.current = true;
         playlistsUpdatedAtRef.current = remote.updatedAt;
+        activePlaylistIdRef.current = nextActivePlaylistId;
         setPlaylists(remotePlaylists);
         setPlaylistsUpdatedAt(remote.updatedAt);
-        setActivePlaylistId((current) =>
-          current && remotePlaylists.some((playlist) => playlist.id === current) ? current : null,
-        );
+        setActivePlaylistIdState(nextActivePlaylistId);
         localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(remotePlaylists));
         localStorage.setItem(PLAYLISTS_UPDATED_AT_KEY, String(remote.updatedAt));
+        if (nextActivePlaylistId) {
+          localStorage.setItem(ACTIVE_PLAYLIST_KEY, nextActivePlaylistId);
+        } else {
+          localStorage.removeItem(ACTIVE_PLAYLIST_KEY);
+        }
 
         window.setTimeout(() => {
           applyingRemotePlaylistsRef.current = false;
@@ -88,7 +127,7 @@ export default function LuVideoModule() {
 
     const syncTimer = window.setTimeout(() => {
       saveModuleCloudData<LuVideoPlaylistsCloudValue>('luvideo', 'playlists', {
-        value: { playlists },
+        value: { playlists, activePlaylistId },
         updatedAt: playlistsUpdatedAt,
       }).catch((error) => {
         console.error('Failed to sync LuVideo playlists', error);
@@ -96,7 +135,7 @@ export default function LuVideoModule() {
     }, 600);
 
     return () => window.clearTimeout(syncTimer);
-  }, [playlists, playlistsUpdatedAt, playlistsCloudReady]);
+  }, [playlists, activePlaylistId, playlistsUpdatedAt, playlistsCloudReady]);
 
   // Initialize YT API
   useEffect(() => {
@@ -108,26 +147,42 @@ export default function LuVideoModule() {
 
       window.onYouTubeIframeAPIReady = () => {
         ytApiLoaded.current = true;
+        setYtReady(true);
       };
     } else {
       ytApiLoaded.current = true;
-    }
-
-    if (apiKey) {
-      handleSearch(DEFAULT_QUERY);
-    } else {
-      setShowApiKeyModal(true);
+      setYtReady(true);
     }
   }, []);
 
-  const handleSearch = async (query: string) => {
-    if (!query.trim() || !apiKey) return;
+  useEffect(() => {
+    if (initialPlaylistStartedRef.current || currentIndex !== -1 || !activePlaylistId) return;
+
+    const playlist = playlists.find((item) => item.id === activePlaylistId);
+    if (!playlist?.videos.length) return;
+
+    initialPlaylistStartedRef.current = true;
+    setViewMode('playlists');
+    setPlaybackSource('playlists');
+    setCurrentIndex(0);
+  }, [activePlaylistId, currentIndex, playlists]);
+
+  const handleSearch = async (query: string, key = apiKey) => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) return;
+    if (!key) {
+      setShowApiKeyModal(true);
+      setError(null);
+      return;
+    }
+
+    initialPlaylistStartedRef.current = true;
     setIsSearching(true);
     setError(null);
     setViewMode('search');
     setPlaybackSource('search');
     try {
-      const results = await searchVideos(query, apiKey);
+      const results = await searchVideos(trimmedQuery, key);
       setVideos(results);
       if (results.length > 0 && autoplay) {
         setCurrentIndex(0);
@@ -150,6 +205,7 @@ export default function LuVideoModule() {
     const targetVideos = source === 'search' ? videos : playlists.find(p => p.id === activePlaylistId)?.videos || [];
     if (index < 0 || index >= targetVideos.length) return;
     
+    initialPlaylistStartedRef.current = true;
     setPlaybackSource(source);
     setCurrentIndex(index);
   };
@@ -174,7 +230,7 @@ export default function LuVideoModule() {
 
     const videoId = activeVideos[currentIndex].id;
     
-    if (ytApiLoaded.current && window.YT && window.YT.Player) {
+    if (ytReady && ytApiLoaded.current && window.YT && window.YT.Player) {
       if (playerRef.current) {
         try {
           playerRef.current.loadVideoById(videoId);
@@ -185,7 +241,7 @@ export default function LuVideoModule() {
         createPlayer(videoId);
       }
     }
-  }, [currentIndex, playbackSource, activePlaylistId]);
+  }, [currentIndex, playbackSource, activePlaylistId, ytReady]);
 
   const createPlayer = (videoId: string) => {
     playerRef.current = new window.YT.Player('luvideo-player', {
@@ -229,6 +285,7 @@ export default function LuVideoModule() {
       updatedAt: new Date().toISOString(),
     };
     updatePlaylists((current) => [...current, newPlaylist]);
+    selectPlaylist(newPlaylist.id);
     setNewPlaylistName('');
     setIsCreatingPlaylist(false);
     return newPlaylist.id;
@@ -237,7 +294,7 @@ export default function LuVideoModule() {
   const deletePlaylist = (id: string) => {
     updatePlaylists((current) => current.filter(p => p.id !== id));
     if (activePlaylistId === id) {
-      setActivePlaylistId(null);
+      selectPlaylist(null);
       if (playbackSource === 'playlists') {
         setPlaybackSource('search');
         setCurrentIndex(-1);
@@ -267,10 +324,13 @@ export default function LuVideoModule() {
   };
 
   const saveApiKey = (newKey: string) => {
-    setApiKey(newKey);
-    localStorage.setItem(STORAGE_KEY, newKey);
+    const trimmedKey = newKey.trim();
+    if (!trimmedKey) return;
+
+    setApiKey(trimmedKey);
+    localStorage.setItem(STORAGE_KEY, trimmedKey);
     setShowApiKeyModal(false);
-    handleSearch(searchQuery || DEFAULT_QUERY);
+    handleSearch(searchQuery || DEFAULT_QUERY, trimmedKey);
   };
 
   const toggleAutoplay = () => {
@@ -280,6 +340,30 @@ export default function LuVideoModule() {
   };
 
   const activePlaylist = playlists.find(p => p.id === activePlaylistId);
+  const movePlaylistVideo = (playlistId: string, fromIndex: number, toIndex: number) => {
+    const playlist = playlists.find((item) => item.id === playlistId);
+    if (!playlist || toIndex < 0 || toIndex >= playlist.videos.length || fromIndex === toIndex) return;
+
+    const currentPlayingVideoId =
+      playbackSource === 'playlists' && playlistId === activePlaylistId ? activeVideos[currentIndex]?.id : null;
+    const nextVideos = [...playlist.videos];
+    const [movedVideo] = nextVideos.splice(fromIndex, 1);
+    if (!movedVideo) return;
+
+    nextVideos.splice(toIndex, 0, movedVideo);
+    updatePlaylists((current) =>
+      current.map((item) =>
+        item.id === playlistId
+          ? { ...item, videos: nextVideos, updatedAt: new Date().toISOString() }
+          : item,
+      ),
+    );
+
+    if (currentPlayingVideoId) {
+      const nextPlayingIndex = nextVideos.findIndex((video) => video.id === currentPlayingVideoId);
+      if (nextPlayingIndex >= 0) setCurrentIndex(nextPlayingIndex);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0f] text-[#f0f0f8] overflow-hidden font-sans">
@@ -466,7 +550,8 @@ export default function LuVideoModule() {
                           e.stopPropagation();
                           setShowAddMenu(showAddMenu === video.id ? null : video.id);
                         }}
-                        className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#e8ff47] hover:text-black"
+                        className="absolute top-2 right-2 p-1.5 bg-black/70 rounded-full opacity-100 transition-opacity hover:bg-[#e8ff47] hover:text-black md:opacity-0 md:group-hover:opacity-100"
+                        title="Add to playlist"
                       >
                         <Plus size={14} />
                       </button>
@@ -513,7 +598,7 @@ export default function LuVideoModule() {
               <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/20">
                 <div className="flex items-center gap-2">
                   <button 
-                    onClick={() => setActivePlaylistId(null)}
+                    onClick={() => selectPlaylist(null)}
                     className={`text-[10px] font-bold tracking-[0.1em] uppercase ${!activePlaylistId ? 'text-[#e8ff47]' : 'text-white/30 hover:text-white'}`}
                   >
                     All Playlists
@@ -583,7 +668,7 @@ export default function LuVideoModule() {
                     playlists.map(p => (
                       <div key={p.id} className="relative group">
                         <button
-                          onClick={() => setActivePlaylistId(p.id)}
+                          onClick={() => selectPlaylist(p.id)}
                           className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-white/5 transition-all text-left bg-white/2"
                         >
                           <div className="w-12 h-12 bg-[#e8ff47]/10 rounded-xl flex items-center justify-center text-[#e8ff47]">
@@ -599,7 +684,8 @@ export default function LuVideoModule() {
                             e.stopPropagation();
                             if (confirm('Delete this playlist?')) deletePlaylist(p.id);
                           }}
-                          className="absolute top-4 right-4 p-2 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"
+                          className="absolute top-4 right-4 p-2 opacity-100 transition-opacity hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
+                          title="Delete playlist"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -648,11 +734,31 @@ export default function LuVideoModule() {
                       </div>
                     ) : (
                       activePlaylist?.videos.map((video, index) => (
-                        <div key={video.id} className="relative group">
+                        <div key={video.id} className="relative group flex items-center gap-1">
+                          <div className="flex flex-col gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                            <button
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => movePlaylistVideo(activePlaylistId!, index, index - 1)}
+                              className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-white/50 transition-colors hover:bg-[#e8ff47] hover:text-black disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-white/5 disabled:hover:text-white/50"
+                              title="Move up"
+                            >
+                              <ArrowUp size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={index === activePlaylist.videos.length - 1}
+                              onClick={() => movePlaylistVideo(activePlaylistId!, index, index + 1)}
+                              className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-white/50 transition-colors hover:bg-[#e8ff47] hover:text-black disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-white/5 disabled:hover:text-white/50"
+                              title="Move down"
+                            >
+                              <ArrowDown size={12} />
+                            </button>
+                          </div>
                           <button
                             onClick={() => playVideo(index, 'playlists')}
-                            className={`w-full flex gap-3 p-2 rounded-xl transition-all text-left hover:bg-white/5 ${
-                              playbackSource === 'playlists' && activePlaylistId === activePlaylistId && currentIndex === index 
+                            className={`min-w-0 flex-1 flex gap-3 p-2 pr-10 rounded-xl transition-all text-left hover:bg-white/5 ${
+                              playbackSource === 'playlists' && currentIndex === index 
                                 ? 'bg-[#e8ff47]/5 border border-[#e8ff47]/20' 
                                 : 'border border-transparent'
                             }`}
@@ -679,7 +785,8 @@ export default function LuVideoModule() {
                               e.stopPropagation();
                               removeVideoFromPlaylist(activePlaylistId!, video.id);
                             }}
-                            className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400"
+                            className="absolute top-2 right-2 p-1.5 opacity-100 transition-opacity hover:text-red-400 md:opacity-0 md:group-hover:opacity-100"
+                            title="Remove from playlist"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -770,4 +877,9 @@ function loadStoredPlaylistsUpdatedAt() {
   const stored = Number(localStorage.getItem(PLAYLISTS_UPDATED_AT_KEY));
   if (Number.isFinite(stored) && stored > 0) return stored;
   return loadStoredPlaylists().length ? Date.now() : 0;
+}
+
+function loadStoredActivePlaylistId() {
+  const stored = localStorage.getItem(ACTIVE_PLAYLIST_KEY);
+  return stored && stored.trim() ? stored : null;
 }
