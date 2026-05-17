@@ -88,9 +88,9 @@ export default function PdfToolsModule() {
 
   const handleFileInput = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
-      const picked = event.target.files;
+      const picked = event.target.files ? Array.from(event.target.files) : [];
       event.target.value = '';
-      if (picked) addFiles(picked);
+      if (picked.length > 0) addFiles(picked);
     },
     [addFiles],
   );

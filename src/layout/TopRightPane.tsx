@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { useTabStore } from '@/state/tabStore';
 import { useModuleStore } from '@/state/moduleStore';
+import { useRightSidebarStore } from '@/state/rightSidebarStore';
 import Icon from '@/components/Icon';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import { openModuleFromShell } from '@/modules/openModule';
@@ -14,6 +15,8 @@ export default function TopRightPane() {
   const openTab = useTabStore((s) => s.openTab);
   const importedModules = useModuleStore((s) => s.importedModules);
   const registryVersion = useModuleStore((s) => s.registryVersion);
+  const rightSidebarVisible = useRightSidebarStore((s) => s.visible);
+  const toggleRightSidebar = useRightSidebarStore((s) => s.toggleVisible);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [showPicker, setShowPicker] = useState(false);
@@ -85,6 +88,25 @@ export default function TopRightPane() {
             </div>
           );
         })}
+      </div>
+
+      {/* Quick right sidebar */}
+      <div className="flex-shrink-0 px-0.5 pb-1">
+        <button
+          type="button"
+          onClick={toggleRightSidebar}
+          className={`
+            w-7 h-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer
+            ${
+              rightSidebarVisible
+                ? 'bg-white text-[var(--color-accent)] border border-[var(--color-border-subtle)] shadow-sm'
+                : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-secondary)]'
+            }
+          `}
+          title={rightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
+        >
+          <Icon name={rightSidebarVisible ? 'panel-right-close' : 'panel-right-open'} size={15} />
+        </button>
       </div>
 
       {/* Add tab button */}

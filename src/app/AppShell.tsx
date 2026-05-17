@@ -1,6 +1,7 @@
 import LeftPane from '@/layout/LeftPane';
 import TopRightPane from '@/layout/TopRightPane';
 import RightPane from '@/layout/RightPane';
+import RightSidebarDrawer from '@/layout/RightSidebarDrawer';
 
 /**
  * AppShell — the main layout container.
@@ -21,6 +22,7 @@ export default function AppShell() {
         <TopRightPane />
         <RightPane />
       </div>
+      <RightSidebarDrawer />
     </div>
   );
 }

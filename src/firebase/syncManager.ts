@@ -5,6 +5,7 @@ import { useUserStore } from '@/state/userStore';
 import { useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
 import { useModuleStore } from '@/state/moduleStore';
+import { useRightSidebarStore } from '@/state/rightSidebarStore';
 import { useSyncStore } from '@/state/syncStore';
 import { offlineStorage } from '@/storage/offlineStorage';
 import { syncRegistryWithModuleStore } from '@/modules/registryRuntime';
@@ -51,6 +52,9 @@ const mergeState = (remote: any) => {
     useSidebarStore.setState({ collapsed: remote.sidebarCollapsed });
     offlineStorage.setSidebarCollapsed(remote.sidebarCollapsed);
   }
+  if (remote.rightSidebar !== undefined) {
+    useRightSidebarStore.getState().syncFromCloud(remote.rightSidebar);
+  }
 };
 
 const getLocalState = () => {
@@ -62,6 +66,11 @@ const getLocalState = () => {
     openTabs: useTabStore.getState().tabs,
     activeTabId: useTabStore.getState().activeTabId,
     sidebarCollapsed: useSidebarStore.getState().collapsed,
+    rightSidebar: {
+      enabled: useRightSidebarStore.getState().enabled,
+      visible: useRightSidebarStore.getState().visible,
+      moduleId: useRightSidebarStore.getState().moduleId,
+    },
     updatedAt: serverTimestamp(),
   };
 };
@@ -117,9 +126,10 @@ export const initSyncManager = () => {
     const s = useSidebarStore.getState()._hydrated;
     const t = useTabStore.getState()._hydrated;
     const m = useModuleStore.getState()._hydrated;
+    const r = useRightSidebarStore.getState()._hydrated;
     
     // We must wait for ALL local stores to hydrate AND Firebase Auth to resolve
-    if (u && s && t && m && authReady && !hydrated) {
+    if (u && s && t && m && r && authReady && !hydrated) {
       hydrated = true;
       if (useUserStore.getState().user) {
         fetchCloudConfig().then(() => {
@@ -157,4 +167,5 @@ export const initSyncManager = () => {
   useSidebarStore.subscribe(() => { checkHydrated(); queueSync(); });
   useTabStore.subscribe(() => { checkHydrated(); queueSync(); });
   useModuleStore.subscribe(() => { checkHydrated(); queueSync(); });
+  useRightSidebarStore.subscribe(() => { checkHydrated(); queueSync(); });
 };

@@ -2,11 +2,30 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import groqChatHandler from './api/ai/groq/chat.js';
+import geminiChatHandler from './api/ai/gemini/chat.js';
 
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    {
+      name: 'ludashboard-ai-api-dev',
+      configureServer(server) {
+        server.middlewares.use(async (req, res, next) => {
+          const pathname = req.url?.split('?')[0];
+          if (pathname === '/api/ai/groq/chat') {
+            await groqChatHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/ai/gemini/chat') {
+            await geminiChatHandler(req, res);
+            return;
+          }
+          next();
+        });
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [

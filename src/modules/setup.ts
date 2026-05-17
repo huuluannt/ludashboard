@@ -32,6 +32,12 @@ import { manifest as lumapManifest } from './lumap/manifest';
 import PdfToolsModule from './pdf-tools/index';
 import { manifest as pdfToolsManifest } from './pdf-tools/manifest';
 
+import LuChatModule from './luchat/index';
+import { manifest as luchatManifest } from './luchat/manifest';
+
+import LuGeminiModule from './lugemini/index';
+import { manifest as lugeminiManifest } from './lugemini/manifest';
+
 // Placeholder modules
 import { placeholderManifests } from './placeholders';
 import PlaceholderModule from './PlaceholderModule';
@@ -53,6 +59,8 @@ export function setupModules() {
     { manifest: luvideoManifest, component: LuVideoModule, source: 'native' },
     { manifest: lumapManifest, component: LuMapModule, source: 'native' },
     { manifest: pdfToolsManifest, component: PdfToolsModule, source: 'native' },
+    { manifest: luchatManifest, component: LuChatModule, source: 'native' },
+    { manifest: lugeminiManifest, component: LuGeminiModule, source: 'native' },
   ];
 
   for (const mod of builtInModules) {

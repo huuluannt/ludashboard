@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   PINNED: 'lu:pinned',
   MODULE_ORDER: 'lu:moduleOrder',
   SIDEBAR: 'lu:sidebar',
+  RIGHT_SIDEBAR: 'lu:rightSidebar',
   USER: 'lu:user',
   IMPORTED_MODULES: 'lu:importedModules',
   MODULE_OVERRIDES: 'lu:moduleOverrides',
@@ -48,6 +49,13 @@ export const offlineStorage = {
   },
   async setSidebarCollapsed(collapsed: boolean) {
     await set(STORAGE_KEYS.SIDEBAR, collapsed);
+  },
+
+  async getRightSidebar() {
+    return (await get(STORAGE_KEYS.RIGHT_SIDEBAR)) ?? null;
+  },
+  async setRightSidebar(state: unknown) {
+    await set(STORAGE_KEYS.RIGHT_SIDEBAR, state);
   },
 
   async getUser() {
