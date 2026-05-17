@@ -26,6 +26,12 @@ import { manifest as collageImgManifest } from './collage-img/manifest';
 import LuVideoModule from './luvideo/index';
 import { manifest as luvideoManifest } from './luvideo/manifest';
 
+import LuMapModule from './lumap/index';
+import { manifest as lumapManifest } from './lumap/manifest';
+
+import PdfToolsModule from './pdf-tools/index';
+import { manifest as pdfToolsManifest } from './pdf-tools/manifest';
+
 // Placeholder modules
 import { placeholderManifests } from './placeholders';
 import PlaceholderModule from './PlaceholderModule';
@@ -39,12 +45,14 @@ export function setupModules() {
 
   // Real modules
   const builtInModules: RegisteredModule[] = [
-    { manifest: calculatorManifest, component: CalculatorModule },
-    { manifest: imageResizerManifest, component: ImageResizerModule },
-    { manifest: notesManifest, component: NotesModule },
-    { manifest: convertImgManifest, component: ConvertImgModule },
-    { manifest: collageImgManifest, component: CollageImgModule },
-    { manifest: luvideoManifest, component: LuVideoModule },
+    { manifest: calculatorManifest, component: CalculatorModule, source: 'native' },
+    { manifest: imageResizerManifest, component: ImageResizerModule, source: 'native' },
+    { manifest: notesManifest, component: NotesModule, source: 'native' },
+    { manifest: convertImgManifest, component: ConvertImgModule, source: 'native' },
+    { manifest: collageImgManifest, component: CollageImgModule, source: 'native' },
+    { manifest: luvideoManifest, component: LuVideoModule, source: 'native' },
+    { manifest: lumapManifest, component: LuMapModule, source: 'native' },
+    { manifest: pdfToolsManifest, component: PdfToolsModule, source: 'native' },
   ];
 
   for (const mod of builtInModules) {
@@ -56,6 +64,7 @@ export function setupModules() {
     moduleRegistry.register({
       manifest,
       component: () => PlaceholderModule({ title: manifest.title }),
+      source: 'native',
     });
   }
 }

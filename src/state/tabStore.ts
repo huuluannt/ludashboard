@@ -12,6 +12,8 @@ interface TabStore {
   closeTab: (moduleId: string) => void;
   setActiveTab: (moduleId: string) => void;
   reorderTabs: (from: number, to: number) => void;
+  updateTab: (moduleId: string, patch: Partial<Omit<TabItem, 'moduleId'>>) => void;
+  replaceTab: (moduleId: string, tab: TabItem) => void;
 }
 
 export const useTabStore = create<TabStore>((set, get) => ({
@@ -73,5 +75,35 @@ export const useTabStore = create<TabStore>((set, get) => ({
     next.splice(to, 0, moved);
     set({ tabs: next });
     offlineStorage.setTabs(next);
+  },
+
+  updateTab(moduleId: string, patch: Partial<Omit<TabItem, 'moduleId'>>) {
+    const { tabs } = get();
+    if (!tabs.some((tab) => tab.moduleId === moduleId)) return;
+
+    const next = tabs.map((tab) =>
+      tab.moduleId === moduleId
+        ? {
+            ...tab,
+            ...patch,
+          }
+        : tab,
+    );
+    set({ tabs: next });
+    offlineStorage.setTabs(next);
+  },
+
+  replaceTab(moduleId: string, tab: TabItem) {
+    const { tabs, activeTabId } = get();
+    if (!tabs.some((item) => item.moduleId === moduleId)) return;
+
+    const next = tabs
+      .filter((item) => item.moduleId === moduleId || item.moduleId !== tab.moduleId)
+      .map((item) => (item.moduleId === moduleId ? tab : item));
+    const nextActive = activeTabId === moduleId ? tab.moduleId : activeTabId;
+
+    set({ tabs: next, activeTabId: nextActive });
+    offlineStorage.setTabs(next);
+    offlineStorage.setActiveTab(nextActive);
   },
 }));

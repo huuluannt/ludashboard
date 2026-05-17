@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import type { DragEvent } from 'react';
+import type { DragEvent, SyntheticEvent } from 'react';
 import { useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
 import { useUserStore } from '@/state/userStore';
@@ -8,11 +8,13 @@ import { useModuleStore } from '@/state/moduleStore';
 import type { ImportedModule } from '@/state/moduleStore';
 import Icon from '@/components/Icon';
 import ImportModuleModal from '@/components/ImportModuleModal';
+import type { EditableModule } from '@/components/ImportModuleModal';
+import { openModuleFromShell } from '@/modules/openModule';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
 import { app } from '@/firebase/config';
 
 const HOME_URL = 'https://ludashboard.vercel.app/';
-const SIDEBAR_EXPANDED_WIDTH = 228;
+const SIDEBAR_EXPANDED_WIDTH = 264;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
 const VIETNAMESE_DAYS = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
@@ -25,8 +27,10 @@ export default function LeftPane() {
   const moduleOrderIds = useSidebarStore((s) => s.moduleOrderIds);
   const togglePin = useSidebarStore((s) => s.togglePin);
   const setModuleOrder = useSidebarStore((s) => s.setModuleOrder);
+  const removeModuleReferences = useSidebarStore((s) => s.removeModuleReferences);
 
   const openTab = useTabStore((s) => s.openTab);
+  const closeTab = useTabStore((s) => s.closeTab);
 
   const user = useUserStore((s) => s.user);
   const signOut = useUserStore((s) => s.signOut);
@@ -37,10 +41,11 @@ export default function LeftPane() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [editingModule, setEditingModule] = useState<ImportedModule | null>(null);
+  const [editingModule, setEditingModule] = useState<EditableModule | null>(null);
   const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
 
   const importedModules = useModuleStore((s) => s.importedModules);
+  const registryVersion = useModuleStore((s) => s.registryVersion);
   const removeModule = useModuleStore((s) => s.removeModule);
 
   const [time, setTime] = useState('');
@@ -70,7 +75,7 @@ export default function LeftPane() {
     return () => document.removeEventListener('mousedown', handler);
   }, [dropdownOpen]);
 
-  const allModules = moduleRegistry.getAll();
+  const allModules = useMemo(() => moduleRegistry.getAll(), [registryVersion]);
 
   const importedModuleMap = useMemo(
     () => new Map(importedModules.map((m) => [m.id, m])),
@@ -122,11 +127,29 @@ export default function LeftPane() {
   };
 
   const handleOpenModule = (mod: (typeof allModules)[0]) => {
-    openTab({
-      moduleId: mod.manifest.id,
-      title: mod.manifest.title,
-      icon: mod.manifest.icon,
-    });
+    openModuleFromShell(mod, importedModules, openTab);
+  };
+
+  const handleEditModule = (mod: (typeof allModules)[0], importedMod: ImportedModule | null) => {
+    setEditingModule(
+      importedMod
+        ? {
+            ...importedMod,
+            isImported: true,
+          }
+        : {
+            ...mod.manifest,
+            isImported: false,
+          },
+    );
+    setImportModalOpen(true);
+  };
+
+  const handleDeleteModule = (id: string) => {
+    removeModule(id);
+    moduleRegistry.unregister(id);
+    closeTab(id);
+    removeModuleReferences(id);
   };
 
   const handleReorderModules = (targetModuleId: string) => {
@@ -231,6 +254,8 @@ export default function LeftPane() {
               placeholder="Search modules…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              onClick={(e) => e.currentTarget.select()}
               className="
                 w-full h-8 pl-8 pr-7 rounded-lg
                 bg-[var(--color-surface-muted)] border border-transparent
@@ -256,6 +281,29 @@ export default function LeftPane() {
       )}
 
       {/* ─── Module Card List ─── */}
+      {!collapsed && (
+        <div className="px-3 pb-2 flex-shrink-0">
+          <button
+            onClick={() => {
+              setEditingModule(null);
+              setImportModalOpen(true);
+            }}
+            className="
+              w-full h-9 px-3 rounded-xl
+              flex items-center gap-2.5
+              border border-dashed border-[var(--color-border)]
+              bg-white text-xs font-medium text-[var(--color-text-secondary)]
+              hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]
+              hover:bg-[var(--color-surface-muted)] transition-colors
+              cursor-pointer
+            "
+          >
+            <Icon name="plus" size={14} />
+            <span>Import Module</span>
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto px-1.5 py-1">
         {/* Pinned section */}
         {filtered.pinned.length > 0 && (
@@ -280,11 +328,8 @@ export default function LeftPane() {
                 onDragStart={() => setDraggedModuleId(mod.manifest.id)}
                 onDragEnd={() => setDraggedModuleId(null)}
                 onDrop={() => handleReorderModules(mod.manifest.id)}
-                onEdit={(importedMod) => {
-                  setEditingModule(importedMod);
-                  setImportModalOpen(true);
-                }}
-                onDelete={(id) => removeModule(id)}
+                onEdit={(importedMod) => handleEditModule(mod, importedMod)}
+                onDelete={handleDeleteModule}
               />
             ))}
             {!collapsed && <div className="mx-2 my-1.5 border-b border-[var(--color-border-subtle)]" />}
@@ -312,35 +357,10 @@ export default function LeftPane() {
             onDragStart={() => setDraggedModuleId(mod.manifest.id)}
             onDragEnd={() => setDraggedModuleId(null)}
             onDrop={() => handleReorderModules(mod.manifest.id)}
-            onEdit={(importedMod) => {
-              setEditingModule(importedMod);
-              setImportModalOpen(true);
-            }}
-            onDelete={(id) => removeModule(id)}
+            onEdit={(importedMod) => handleEditModule(mod, importedMod)}
+            onDelete={handleDeleteModule}
           />
         ))}
-
-        {/* Install Module button */}
-        {!collapsed && (
-          <button
-            onClick={() => {
-              setEditingModule(null);
-              setImportModalOpen(true);
-            }}
-            className="
-              w-full mt-1 px-3 py-2 rounded-xl
-              flex items-center gap-2.5
-              text-xs text-[var(--color-text-tertiary)]
-              hover:bg-[var(--color-surface-muted)] transition-colors
-              cursor-pointer
-            "
-          >
-            <div className="w-7 h-7 rounded-lg border border-dashed border-[var(--color-border)] flex items-center justify-center">
-              <Icon name="plus" size={13} />
-            </div>
-            <span>Import Module</span>
-          </button>
-        )}
       </div>
 
       {/* ─── Account Area ─── */}
@@ -425,7 +445,7 @@ interface ModuleCardProps {
   onDragStart: () => void;
   onDragEnd: () => void;
   onDrop: () => void;
-  onEdit: (mod: ImportedModule) => void;
+  onEdit: (mod: ImportedModule | null) => void;
   onDelete: (id: string) => void;
 }
 
@@ -450,6 +470,14 @@ function ModuleCard({
 
   const isImported = importedMod != null;
 
+  const stopCardAction = (e: SyntheticEvent) => {
+    e.stopPropagation();
+  };
+
+  const isCardAction = (target: EventTarget | null) => {
+    return target instanceof HTMLElement && target.closest('[data-card-action]') != null;
+  };
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -461,6 +489,10 @@ function ModuleCard({
   }, [dropdownOpen]);
 
   const handleDragStart = (e: DragEvent) => {
+    if (isCardAction(e.target)) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', mod.manifest.id);
     onDragStart();
@@ -526,7 +558,9 @@ function ModuleCard({
       `}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
-      onClick={onOpen}
+      onClick={(e) => {
+        if (!isCardAction(e.target)) onOpen();
+      }}
     >
       <div className="w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center flex-shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <Icon name={mod.manifest.icon} size={20} className="text-[var(--color-text-secondary)]" />
@@ -535,63 +569,67 @@ function ModuleCard({
         <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{mod.manifest.title}</p>
         <p className="text-[10px] text-[var(--color-text-tertiary)] truncate">{mod.manifest.description}</p>
       </div>
-      {/* Pin & more buttons (visible on hover) */}
+      {/* More button (visible on hover) */}
       <div
         className={`flex items-center gap-0.5 flex-shrink-0 transition-opacity ${
           hovering ? 'opacity-100' : 'opacity-0'
         }`}
+        data-card-action
+        onMouseDown={stopCardAction}
+        onPointerDown={stopCardAction}
       >
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onTogglePin();
-          }}
-          className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors cursor-pointer ${
-            isPinned
-              ? 'text-[var(--color-accent)]'
-              : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
-          }`}
-          title={isPinned ? 'Unpin' : 'Pin'}
-        >
-          <Icon name="pin" size={12} />
-        </button>
-
-        {isImported && (
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setDropdownOpen(p => !p);
-              }}
-              className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
-              title="More options"
+        <div className="relative" ref={dropdownRef}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDropdownOpen(p => !p);
+            }}
+            onMouseDown={stopCardAction}
+            className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+            title="More options"
+          >
+            <Icon name="more-horizontal" size={12} />
+          </button>
+          {dropdownOpen && (
+            <div
+              className="absolute top-full right-0 mt-1 w-36 bg-white rounded-xl border border-[var(--color-border)] shadow-lg z-50 py-1"
+              onMouseDown={stopCardAction}
+              onClick={stopCardAction}
             >
-              <Icon name="more-horizontal" size={12} />
-            </button>
-            {dropdownOpen && (
-              <div className="absolute top-full right-0 mt-1 w-32 bg-white rounded-xl border border-[var(--color-border)] shadow-lg z-50 py-1">
-                <DropdownItem 
-                  icon="edit" 
-                  label="Rename / Edit" 
-                  onClick={() => { 
-                    setDropdownOpen(false); 
-                    if (importedMod) onEdit(importedMod); 
-                  }} 
-                />
-                <div className="mx-2 my-1 border-b border-[var(--color-border-subtle)]" />
-                <DropdownItem 
-                  icon="trash" 
-                  label="Delete" 
-                  danger 
-                  onClick={() => { 
-                    setDropdownOpen(false); 
-                    onDelete(mod.manifest.id); 
-                  }} 
-                />
-              </div>
-            )}
-          </div>
-        )}
+              <DropdownItem
+                icon="pin"
+                label={isPinned ? 'Unpin' : 'Pin'}
+                onClick={() => {
+                  setDropdownOpen(false);
+                  onTogglePin();
+                }}
+              />
+              <DropdownItem
+                icon="edit"
+                label="Edit"
+                onClick={() => {
+                  onEdit(importedMod);
+                  setDropdownOpen(false);
+                }}
+              />
+              {isImported && (
+                <>
+                  <div className="mx-2 my-1 border-b border-[var(--color-border-subtle)]" />
+                  <DropdownItem
+                    icon="trash"
+                    label="Delete"
+                    danger
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      onDelete(mod.manifest.id);
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -612,7 +650,15 @@ function DropdownItem({
 }) {
   return (
     <button
-      onClick={onClick}
+      type="button"
+      onMouseDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
       className={`
         w-full flex items-center gap-2.5 px-3 py-2 text-xs
         transition-colors cursor-pointer

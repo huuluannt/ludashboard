@@ -1,19 +1,23 @@
 import { useMemo } from 'react';
 import { useTabStore } from '@/state/tabStore';
+import { useModuleStore } from '@/state/moduleStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import Icon from '@/components/Icon';
+import { openModuleFromShell } from '@/modules/openModule';
 
 export default function RightPane() {
   const activeTabId = useTabStore((s) => s.activeTabId);
   const tabs = useTabStore((s) => s.tabs);
   const openTab = useTabStore((s) => s.openTab);
+  const importedModules = useModuleStore((s) => s.importedModules);
+  const registryVersion = useModuleStore((s) => s.registryVersion);
 
   // Memoize the active module's component
   const ActiveComponent = useMemo(() => {
     if (!activeTabId) return null;
     const mod = moduleRegistry.get(activeTabId);
     return mod?.component ?? null;
-  }, [activeTabId]);
+  }, [activeTabId, registryVersion]);
 
   // Empty state
   if (!activeTabId || !ActiveComponent) {
@@ -38,13 +42,7 @@ export default function RightPane() {
               .map((mod) => (
                 <button
                   key={mod.manifest.id}
-                  onClick={() =>
-                    openTab({
-                      moduleId: mod.manifest.id,
-                      title: mod.manifest.title,
-                      icon: mod.manifest.icon,
-                    })
-                  }
+                  onClick={() => openModuleFromShell(mod, importedModules, openTab)}
                   className="
                     flex items-center gap-1.5 px-3 py-1.5 rounded-lg
                     border border-[var(--color-border)] bg-white

@@ -4,13 +4,19 @@ import {
   ExternalLink, List, Plus, Trash2, Edit2, Check, MoreVertical, FolderPlus
 } from 'lucide-react';
 import Icon from '@/components/Icon';
+import { saveModuleCloudData, subscribeModuleCloudData } from '@/firebase/moduleCloudSync';
 import { VideoItem, Playlist, SavedVideo } from './types';
 import { searchVideos } from './youtubeApi';
 
 const STORAGE_KEY = 'luvideo_api_key';
 const AUTOPLAY_KEY = 'luvideo_autoplay';
 const PLAYLISTS_KEY = 'luvideo_playlists';
+const PLAYLISTS_UPDATED_AT_KEY = 'luvideo_playlists_updated_at';
 const DEFAULT_QUERY = 'trending music';
+
+interface LuVideoPlaylistsCloudValue {
+  playlists: Playlist[];
+}
 
 declare global {
   interface Window {
@@ -22,10 +28,9 @@ declare global {
 export default function LuVideoModule() {
   const [apiKey, setApiKey] = useState<string>(() => localStorage.getItem(STORAGE_KEY) || '');
   const [autoplay, setAutoplay] = useState<boolean>(() => localStorage.getItem(AUTOPLAY_KEY) !== 'false');
-  const [playlists, setPlaylists] = useState<Playlist[]>(() => {
-    const saved = localStorage.getItem(PLAYLISTS_KEY);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [playlists, setPlaylists] = useState<Playlist[]>(loadStoredPlaylists);
+  const [playlistsUpdatedAt, setPlaylistsUpdatedAt] = useState<number>(loadStoredPlaylistsUpdatedAt);
+  const [playlistsCloudReady, setPlaylistsCloudReady] = useState(false);
 
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(-1);
@@ -44,11 +49,54 @@ export default function LuVideoModule() {
 
   const playerRef = useRef<any>(null);
   const ytApiLoaded = useRef(false);
+  const playlistsUpdatedAtRef = useRef(playlistsUpdatedAt);
+  const applyingRemotePlaylistsRef = useRef(false);
 
   // Persistence
   useEffect(() => {
+    playlistsUpdatedAtRef.current = playlistsUpdatedAt;
+  }, [playlistsUpdatedAt]);
+
+  useEffect(() => {
+    return subscribeModuleCloudData<LuVideoPlaylistsCloudValue>('luvideo', 'playlists', {
+      onData: (remote) => {
+        if (remote.updatedAt <= playlistsUpdatedAtRef.current) return;
+
+        const remotePlaylists = Array.isArray(remote.value.playlists) ? remote.value.playlists : [];
+        applyingRemotePlaylistsRef.current = true;
+        playlistsUpdatedAtRef.current = remote.updatedAt;
+        setPlaylists(remotePlaylists);
+        setPlaylistsUpdatedAt(remote.updatedAt);
+        setActivePlaylistId((current) =>
+          current && remotePlaylists.some((playlist) => playlist.id === current) ? current : null,
+        );
+        localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(remotePlaylists));
+        localStorage.setItem(PLAYLISTS_UPDATED_AT_KEY, String(remote.updatedAt));
+
+        window.setTimeout(() => {
+          applyingRemotePlaylistsRef.current = false;
+        }, 0);
+      },
+      onReady: () => setPlaylistsCloudReady(true),
+    });
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
-  }, [playlists]);
+    localStorage.setItem(PLAYLISTS_UPDATED_AT_KEY, String(playlistsUpdatedAt));
+    if (!playlistsCloudReady || applyingRemotePlaylistsRef.current || playlistsUpdatedAt <= 0) return;
+
+    const syncTimer = window.setTimeout(() => {
+      saveModuleCloudData<LuVideoPlaylistsCloudValue>('luvideo', 'playlists', {
+        value: { playlists },
+        updatedAt: playlistsUpdatedAt,
+      }).catch((error) => {
+        console.error('Failed to sync LuVideo playlists', error);
+      });
+    }, 600);
+
+    return () => window.clearTimeout(syncTimer);
+  }, [playlists, playlistsUpdatedAt, playlistsCloudReady]);
 
   // Initialize YT API
   useEffect(() => {
@@ -163,6 +211,13 @@ export default function LuVideoModule() {
     });
   };
 
+  const updatePlaylists = useCallback((updater: Playlist[] | ((current: Playlist[]) => Playlist[])) => {
+    const updatedAt = Date.now();
+    playlistsUpdatedAtRef.current = updatedAt;
+    setPlaylists((current) => (typeof updater === 'function' ? updater(current) : updater));
+    setPlaylistsUpdatedAt(updatedAt);
+  }, []);
+
   // Playlist Management
   const createPlaylist = (name: string) => {
     if (!name.trim()) return;
@@ -173,14 +228,14 @@ export default function LuVideoModule() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setPlaylists([...playlists, newPlaylist]);
+    updatePlaylists((current) => [...current, newPlaylist]);
     setNewPlaylistName('');
     setIsCreatingPlaylist(false);
     return newPlaylist.id;
   };
 
   const deletePlaylist = (id: string) => {
-    setPlaylists(playlists.filter(p => p.id !== id));
+    updatePlaylists((current) => current.filter(p => p.id !== id));
     if (activePlaylistId === id) {
       setActivePlaylistId(null);
       if (playbackSource === 'playlists') {
@@ -191,7 +246,7 @@ export default function LuVideoModule() {
   };
 
   const addVideoToPlaylist = (playlistId: string, video: VideoItem) => {
-    setPlaylists(playlists.map(p => {
+    updatePlaylists((current) => current.map(p => {
       if (p.id === playlistId) {
         if (p.videos.find(v => v.id === video.id)) return p;
         const saved: SavedVideo = { ...video, savedAt: new Date().toISOString() };
@@ -203,7 +258,7 @@ export default function LuVideoModule() {
   };
 
   const removeVideoFromPlaylist = (playlistId: string, videoId: string) => {
-    setPlaylists(playlists.map(p => {
+    updatePlaylists((current) => current.map(p => {
       if (p.id === playlistId) {
         return { ...p, videos: p.videos.filter(v => v.id !== videoId), updatedAt: new Date().toISOString() };
       }
@@ -567,7 +622,11 @@ export default function LuVideoModule() {
                         onClick={() => {
                           const name = prompt('Rename playlist:', activePlaylist?.name);
                           if (name) {
-                            setPlaylists(playlists.map(p => p.id === activePlaylistId ? { ...p, name, updatedAt: new Date().toISOString() } : p));
+                            updatePlaylists((current) =>
+                              current.map(p =>
+                                p.id === activePlaylistId ? { ...p, name, updatedAt: new Date().toISOString() } : p,
+                              ),
+                            );
                           }
                         }}
                         className="p-2 bg-white/5 rounded-xl hover:bg-white/10"
@@ -695,4 +754,20 @@ export default function LuVideoModule() {
       )}
     </div>
   );
+}
+
+function loadStoredPlaylists() {
+  try {
+    const saved = localStorage.getItem(PLAYLISTS_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadStoredPlaylistsUpdatedAt() {
+  const stored = Number(localStorage.getItem(PLAYLISTS_UPDATED_AT_KEY));
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  return loadStoredPlaylists().length ? Date.now() : 0;
 }

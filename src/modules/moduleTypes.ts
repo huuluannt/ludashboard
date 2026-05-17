@@ -18,6 +18,8 @@ export interface ModuleManifest {
   description: string;
   /** Whether the module works without internet */
   offline: boolean;
+  /** Whether the module should open outside the dashboard tab area */
+  openInNewWindow?: boolean;
   /** Optional permissions the module requires */
   permissions?: string[];
 }
@@ -28,6 +30,7 @@ export interface ModuleManifest {
 export interface RegisteredModule {
   manifest: ModuleManifest;
   component: ComponentType;
+  source?: 'native' | 'imported';
 }
 
 /**

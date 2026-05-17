@@ -6,7 +6,8 @@ import { useUserStore } from '@/state/userStore';
 import { useModuleStore } from '@/state/moduleStore';
 import { initSyncManager } from '@/firebase/syncManager';
 import { moduleRegistry } from '@/modules/moduleRegistry';
-import IframeModule from '@/modules/IframeModule';
+import { createTabFromModule } from '@/modules/openModule';
+import { syncRegistryWithModuleStore } from '@/modules/registryRuntime';
 import AppShell from '@/app/AppShell';
 import InstallPrompt from '@/components/InstallPrompt';
 import OfflineIndicator from '@/components/OfflineIndicator';
@@ -37,16 +38,20 @@ export default function App() {
       useUserStore.getState().hydrate(),
       useModuleStore.getState().hydrate(),
     ]).then(() => {
-      // Register imported modules dynamically
-      const imported = useModuleStore.getState().importedModules;
-      imported.forEach((mod) => {
-        if (!moduleRegistry.has(mod.id)) {
-          moduleRegistry.register({
-            manifest: mod,
-            component: () => <IframeModule url={mod.url} />,
-          });
+      const moduleState = useModuleStore.getState();
+      syncRegistryWithModuleStore(moduleState.importedModules, moduleState.moduleOverrides);
+
+      const requestedModuleId = new URLSearchParams(window.location.search).get('module');
+      if (requestedModuleId) {
+        const requestedModule = moduleRegistry.get(requestedModuleId);
+        if (requestedModule) {
+          useTabStore.getState().openTab(createTabFromModule(requestedModule));
+          const url = new URL(window.location.href);
+          url.searchParams.delete('module');
+          window.history.replaceState(null, '', url);
         }
-      });
+      }
+
       setReady(true);
     });
   }, []);

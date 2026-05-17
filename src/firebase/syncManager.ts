@@ -7,14 +7,29 @@ import { useTabStore } from '@/state/tabStore';
 import { useModuleStore } from '@/state/moduleStore';
 import { useSyncStore } from '@/state/syncStore';
 import { offlineStorage } from '@/storage/offlineStorage';
+import { syncRegistryWithModuleStore } from '@/modules/registryRuntime';
 
 let syncTimeout: ReturnType<typeof setTimeout> | null = null;
 let isInitialSync = true;
 
 const mergeState = (remote: any) => {
   if (remote.importedModules) {
-    useModuleStore.setState({ importedModules: remote.importedModules });
+    useModuleStore.setState((state) => ({
+      importedModules: remote.importedModules,
+      registryVersion: state.registryVersion + 1,
+    }));
     offlineStorage.setImportedModules(remote.importedModules);
+  }
+  if (remote.moduleOverrides) {
+    useModuleStore.setState((state) => ({
+      moduleOverrides: remote.moduleOverrides,
+      registryVersion: state.registryVersion + 1,
+    }));
+    offlineStorage.setModuleOverrides(remote.moduleOverrides);
+  }
+  if (remote.importedModules || remote.moduleOverrides) {
+    const moduleState = useModuleStore.getState();
+    syncRegistryWithModuleStore(moduleState.importedModules, moduleState.moduleOverrides);
   }
   if (remote.pinnedModuleIds) {
     useSidebarStore.setState({ pinnedModuleIds: remote.pinnedModuleIds });
@@ -41,6 +56,7 @@ const mergeState = (remote: any) => {
 const getLocalState = () => {
   return {
     importedModules: useModuleStore.getState().importedModules,
+    moduleOverrides: useModuleStore.getState().moduleOverrides,
     pinnedModuleIds: useSidebarStore.getState().pinnedModuleIds,
     moduleOrderIds: useSidebarStore.getState().moduleOrderIds,
     openTabs: useTabStore.getState().tabs,

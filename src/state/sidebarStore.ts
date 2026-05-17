@@ -13,6 +13,8 @@ interface SidebarStore {
   setSearchQuery: (q: string) => void;
   togglePin: (moduleId: string) => void;
   setModuleOrder: (moduleIds: string[]) => void;
+  removeModuleReferences: (moduleId: string) => void;
+  replaceModuleId: (moduleId: string, nextModuleId: string) => void;
   isPinned: (moduleId: string) => boolean;
 }
 
@@ -52,6 +54,24 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
   setModuleOrder(moduleIds: string[]) {
     set({ moduleOrderIds: moduleIds });
     offlineStorage.setModuleOrder(moduleIds);
+  },
+
+  removeModuleReferences(moduleId: string) {
+    const pinnedModuleIds = get().pinnedModuleIds.filter((id) => id !== moduleId);
+    const moduleOrderIds = get().moduleOrderIds.filter((id) => id !== moduleId);
+    set({ pinnedModuleIds, moduleOrderIds });
+    offlineStorage.setPinned(pinnedModuleIds);
+    offlineStorage.setModuleOrder(moduleOrderIds);
+  },
+
+  replaceModuleId(moduleId: string, nextModuleId: string) {
+    const replace = (ids: string[]) =>
+      Array.from(new Set(ids.map((id) => (id === moduleId ? nextModuleId : id))));
+    const pinnedModuleIds = replace(get().pinnedModuleIds);
+    const moduleOrderIds = replace(get().moduleOrderIds);
+    set({ pinnedModuleIds, moduleOrderIds });
+    offlineStorage.setPinned(pinnedModuleIds);
+    offlineStorage.setModuleOrder(moduleOrderIds);
   },
 
   isPinned(moduleId: string) {

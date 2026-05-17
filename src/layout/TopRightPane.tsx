@@ -1,7 +1,9 @@
 import { useRef, useState, useCallback } from 'react';
 import { useTabStore } from '@/state/tabStore';
+import { useModuleStore } from '@/state/moduleStore';
 import Icon from '@/components/Icon';
 import { moduleRegistry } from '@/modules/moduleRegistry';
+import { openModuleFromShell } from '@/modules/openModule';
 
 export default function TopRightPane() {
   const tabs = useTabStore((s) => s.tabs);
@@ -10,6 +12,8 @@ export default function TopRightPane() {
   const closeTab = useTabStore((s) => s.closeTab);
   const reorderTabs = useTabStore((s) => s.reorderTabs);
   const openTab = useTabStore((s) => s.openTab);
+  const importedModules = useModuleStore((s) => s.importedModules);
+  const registryVersion = useModuleStore((s) => s.registryVersion);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [showPicker, setShowPicker] = useState(false);
@@ -35,6 +39,7 @@ export default function TopRightPane() {
   }, []);
 
   const allModules = moduleRegistry.getAll();
+  void registryVersion;
 
   return (
     <div className="h-10 min-h-[40px] flex items-end bg-[var(--color-surface-subtle)] border-b border-[var(--color-border-subtle)] select-none relative">
@@ -101,11 +106,7 @@ export default function TopRightPane() {
                 <button
                   key={mod.manifest.id}
                   onClick={() => {
-                    openTab({
-                      moduleId: mod.manifest.id,
-                      title: mod.manifest.title,
-                      icon: mod.manifest.icon,
-                    });
+                    openModuleFromShell(mod, importedModules, openTab);
                     setShowPicker(false);
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-[var(--color-surface-subtle)] transition-colors cursor-pointer"

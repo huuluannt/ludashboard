@@ -22,6 +22,26 @@ class ModuleRegistry {
     this.modules.set(mod.manifest.id, mod);
   }
 
+  /** Register or replace a module. */
+  upsert(mod: RegisteredModule): void {
+    this.modules.set(mod.manifest.id, mod);
+  }
+
+  /** Update metadata for an already registered module. */
+  updateManifest(id: string, patch: Partial<RegisteredModule['manifest']>): boolean {
+    const existing = this.modules.get(id);
+    if (!existing) return false;
+    this.modules.set(id, {
+      ...existing,
+      manifest: {
+        ...existing.manifest,
+        ...patch,
+        id: existing.manifest.id,
+      },
+    });
+    return true;
+  }
+
   /** Unregister a module by id. */
   unregister(id: string): boolean {
     return this.modules.delete(id);

@@ -8,16 +8,6 @@ import type { ModuleManifest } from './moduleTypes';
 
 export const placeholderManifests: ModuleManifest[] = [
   {
-    id: 'pdf-tools',
-    title: 'PDF Tools',
-    icon: 'file-text',
-    version: '0.0.0',
-    category: 'Productivity',
-    description: 'Merge, split, and edit PDF files',
-    offline: false,
-    permissions: [],
-  },
-  {
     id: 'unit-converter',
     title: 'Unit Converter',
     icon: 'ruler',

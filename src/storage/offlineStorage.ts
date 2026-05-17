@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   SIDEBAR: 'lu:sidebar',
   USER: 'lu:user',
   IMPORTED_MODULES: 'lu:importedModules',
+  MODULE_OVERRIDES: 'lu:moduleOverrides',
 } as const;
 
 /**
@@ -61,5 +62,12 @@ export const offlineStorage = {
   },
   async setImportedModules(modules: any[]) {
     await set(STORAGE_KEYS.IMPORTED_MODULES, modules);
+  },
+
+  async getModuleOverrides(): Promise<any[]> {
+    return (await get(STORAGE_KEYS.MODULE_OVERRIDES)) ?? [];
+  },
+  async setModuleOverrides(overrides: any[]) {
+    await set(STORAGE_KEYS.MODULE_OVERRIDES, overrides);
   },
 };
