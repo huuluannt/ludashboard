@@ -4,6 +4,7 @@ import { useModuleStore } from '@/state/moduleStore';
 import { useRightSidebarStore } from '@/state/rightSidebarStore';
 import Icon from '@/components/Icon';
 import QuickNoteButton from '@/layout/QuickNoteButton';
+import QuickTools from '@/layout/QuickTools';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import { openModuleFromShell } from '@/modules/openModule';
 
@@ -128,6 +129,8 @@ export default function TopRightPane() {
           </>
         )}
       </div>
+
+      <QuickTools />
 
       <QuickNoteButton />
 

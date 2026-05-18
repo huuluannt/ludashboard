@@ -11,7 +11,7 @@ import ImportModuleModal from '@/components/ImportModuleModal';
 import MiniMusicPlayer from '@/components/lumusic/MiniMusicPlayer';
 import LuVideoMiniPlayer from '@/components/luvideo/LuVideoMiniPlayer';
 import type { EditableModule } from '@/components/ImportModuleModal';
-import { openModuleFromShell } from '@/modules/openModule';
+import { getDashboardModuleUrl, getExternalModuleUrl, openModuleFromShell } from '@/modules/openModule';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
 import { app } from '@/firebase/config';
 
@@ -43,6 +43,7 @@ export default function LeftPane() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchAreaRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const allFilterInputRef = useRef<HTMLInputElement>(null);
   
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [editingModule, setEditingModule] = useState<EditableModule | null>(null);
@@ -50,6 +51,8 @@ export default function LeftPane() {
   const [showAllModules, setShowAllModules] = useState(false);
   const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
+  const [allFilterQuery, setAllFilterQuery] = useState('');
+  const [selectedFilterIndex, setSelectedFilterIndex] = useState(0);
 
   const importedModules = useModuleStore((s) => s.importedModules);
   const registryVersion = useModuleStore((s) => s.registryVersion);
@@ -125,10 +128,29 @@ export default function LeftPane() {
     [orderedModules, pinnedModuleIds],
   );
 
+  const allModulesForSidebar = useMemo(() => {
+    const allList = [...pinnedModules, ...unpinnedModules];
+    const q = allFilterQuery.trim();
+    if (!q) return allList;
+
+    return allList
+      .map((mod, index) => ({
+        mod,
+        index,
+        score: getSearchScore(
+          `${mod.manifest.title} ${mod.manifest.category} ${mod.manifest.description}`,
+          q,
+        ),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+      .map((item) => item.mod);
+  }, [allFilterQuery, pinnedModules, unpinnedModules]);
+
   const sidebarModules = useMemo(() => {
     if (collapsed) return pinnedModules.length > 0 ? pinnedModules : orderedModules;
-    return showAllModules ? [...pinnedModules, ...unpinnedModules] : pinnedModules;
-  }, [collapsed, orderedModules, pinnedModules, showAllModules, unpinnedModules]);
+    return showAllModules ? allModulesForSidebar : pinnedModules;
+  }, [allModulesForSidebar, collapsed, orderedModules, pinnedModules, showAllModules]);
 
   const searchResults = useMemo(() => {
     const q = searchQuery.trim();
@@ -152,6 +174,10 @@ export default function LeftPane() {
     setSelectedSearchIndex(0);
   }, [searchQuery, searchResults.length]);
 
+  useEffect(() => {
+    setSelectedFilterIndex(0);
+  }, [allFilterQuery, sidebarModules.length, showAllModules]);
+
   const searchOverlayVisible = searchOverlayOpen && searchQuery.trim().length > 0;
 
   const handleLogoReload = () => {
@@ -164,6 +190,11 @@ export default function LeftPane() {
 
   const handleOpenModule = (mod: (typeof allModules)[0]) => {
     openModuleFromShell(mod, importedModules, openTab);
+  };
+
+  const handleOpenModuleInNewWindow = (mod: (typeof allModules)[0]) => {
+    const url = getExternalModuleUrl(mod, importedModules) ?? getDashboardModuleUrl(mod.manifest.id);
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleOpenSearchResult = (mod: (typeof allModules)[0]) => {
@@ -201,6 +232,33 @@ export default function LeftPane() {
       setSearchOverlayOpen(false);
       setSearchQuery('');
       searchInputRef.current?.blur();
+    }
+  };
+
+  const handleAllFilterKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSelectedFilterIndex((index) => Math.min(index + 1, Math.max(0, sidebarModules.length - 1)));
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSelectedFilterIndex((index) => Math.max(0, index - 1));
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selectedModule = sidebarModules[selectedFilterIndex] ?? sidebarModules[0];
+      if (selectedModule) handleOpenModule(selectedModule);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setAllFilterQuery('');
+      allFilterInputRef.current?.blur();
     }
   };
 
@@ -447,7 +505,13 @@ export default function LeftPane() {
             </span>
             <button
               type="button"
-              onClick={() => setShowAllModules((value) => !value)}
+              onClick={() => {
+                setShowAllModules((value) => {
+                  const next = !value;
+                  if (!next) setAllFilterQuery('');
+                  return next;
+                });
+              }}
               className="ml-auto rounded-md px-1.5 py-1 text-[11px] font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-white"
             >
               {showAllModules ? 'Pinned' : 'View All'}
@@ -455,10 +519,55 @@ export default function LeftPane() {
           </div>
         )}
 
+        {showAllModules && !collapsed && (
+          <div className="px-2 pb-2">
+            <div className="relative">
+              <Icon
+                name="search"
+                size={13}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-tertiary)]"
+              />
+              <input
+                ref={allFilterInputRef}
+                type="text"
+                value={allFilterQuery}
+                onChange={(event) => setAllFilterQuery(event.target.value)}
+                onFocus={(event) => event.currentTarget.select()}
+                onClick={(event) => event.currentTarget.select()}
+                onKeyDown={handleAllFilterKeyDown}
+                placeholder="Filter all modules..."
+                className="
+                  h-8 w-full rounded-lg border border-black/35
+                  bg-[var(--color-surface-muted)] pl-8 pr-7
+                  text-xs text-[var(--color-text-primary)]
+                  placeholder:text-[var(--color-text-tertiary)]
+                  shadow-sm transition-colors
+                  focus:border-black focus:bg-white focus:outline-none
+                "
+              />
+              {allFilterQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAllFilterQuery('');
+                    allFilterInputRef.current?.focus();
+                  }}
+                  className="absolute right-2 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-[var(--color-text-tertiary)] transition-colors hover:text-[var(--color-text-secondary)]"
+                  title="Clear filter"
+                >
+                  <Icon name="x" size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {sidebarModules.length === 0 && !collapsed ? (
           <div className="mx-2 rounded-xl border border-dashed border-[var(--color-border)] px-3 py-5 text-center">
             <p className="text-[11px] leading-5 text-[var(--color-text-tertiary)]">
-              No pinned modules yet. Use View All and pin your favorites.
+              {showAllModules && allFilterQuery.trim()
+                ? 'No modules match this filter.'
+                : 'No pinned modules yet. Use View All and pin your favorites.'}
             </p>
           </div>
         ) : null}
@@ -469,9 +578,11 @@ export default function LeftPane() {
             mod={mod}
             collapsed={collapsed}
             isPinned={pinnedModuleIds.includes(mod.manifest.id)}
+            isSelected={showAllModules && sidebarModules[selectedFilterIndex]?.manifest.id === mod.manifest.id}
             importedMod={importedModuleMap.get(mod.manifest.id) ?? null}
             isDragging={draggedModuleId === mod.manifest.id}
             onOpen={() => handleOpenModule(mod)}
+            onOpenNewWindow={() => handleOpenModuleInNewWindow(mod)}
             onTogglePin={() => togglePin(mod.manifest.id)}
             onDragStart={() => setDraggedModuleId(mod.manifest.id)}
             onDragEnd={() => setDraggedModuleId(null)}
@@ -560,9 +671,11 @@ interface ModuleCardProps {
   mod: ReturnType<typeof moduleRegistry.getAll>[0];
   collapsed: boolean;
   isPinned: boolean;
+  isSelected?: boolean;
   importedMod: ImportedModule | null;
   isDragging: boolean;
   onOpen: () => void;
+  onOpenNewWindow: () => void;
   onTogglePin: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -575,9 +688,11 @@ function ModuleCard({
   mod,
   collapsed,
   isPinned,
+  isSelected = false,
   importedMod,
   isDragging,
   onOpen,
+  onOpenNewWindow,
   onTogglePin,
   onDragStart,
   onDragEnd,
@@ -676,6 +791,7 @@ function ModuleCard({
         module-card flex items-center gap-2.5 px-2 py-1.5 rounded-xl
         cursor-grab active:cursor-grabbing group transition-all
         ${isDragging ? 'opacity-45' : ''}
+        ${isSelected ? 'bg-white ring-1 ring-black/15 shadow-sm' : ''}
         ${dragOver ? 'bg-[var(--color-surface-muted)] ring-1 ring-[var(--color-accent)]/25' : ''}
       `}
       onMouseEnter={() => setHovering(true)}
@@ -715,7 +831,7 @@ function ModuleCard({
           </button>
           {dropdownOpen && (
             <div
-              className="absolute top-full right-0 mt-1 w-36 bg-white rounded-xl border border-[var(--color-border)] shadow-lg z-50 py-1"
+              className="absolute top-full right-0 mt-1 w-48 bg-white rounded-xl border border-[var(--color-border)] shadow-lg z-50 py-1"
               onMouseDown={stopCardAction}
               onClick={stopCardAction}
             >
@@ -725,6 +841,14 @@ function ModuleCard({
                 onClick={() => {
                   setDropdownOpen(false);
                   onTogglePin();
+                }}
+              />
+              <DropdownItem
+                icon="external-link"
+                label="Open in New Window"
+                onClick={() => {
+                  setDropdownOpen(false);
+                  onOpenNewWindow();
                 }}
               />
               <DropdownItem
