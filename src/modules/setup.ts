@@ -44,6 +44,9 @@ import { manifest as lugeminiManifest } from './lugemini/manifest';
 import CloudStorageModule from './cloud-storage/index';
 import { manifest as cloudStorageManifest } from './cloud-storage/manifest';
 
+import LuCalendarModule from './lucalendar/index';
+import { manifest as luCalendarManifest } from './lucalendar/manifest';
+
 // Placeholder modules
 import { placeholderManifests } from './placeholders';
 import PlaceholderModule from './PlaceholderModule';
@@ -69,6 +72,7 @@ export function setupModules() {
     { manifest: luchatManifest, component: LuChatModule, source: 'native' },
     { manifest: lugeminiManifest, component: LuGeminiModule, source: 'native' },
     { manifest: cloudStorageManifest, component: CloudStorageModule, source: 'native' },
+    { manifest: luCalendarManifest, component: LuCalendarModule, source: 'native' },
   ];
 
   for (const mod of builtInModules) {

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -6,12 +6,23 @@ import groqChatHandler from './api/ai/groq/chat.js';
 import groqTranslateHandler from './api/ai/groq/translate.js';
 import geminiChatHandler from './api/ai/gemini/chat.js';
 import musicSearchHandler from './api/music/search.js';
+import calendarConnectHandler from './api/calendar/connect.js';
+import calendarCallbackHandler from './api/calendar/callback.js';
+import calendarAccountsHandler from './api/calendar/accounts.js';
+import calendarCalendarsHandler from './api/calendar/calendars.js';
+import calendarEventsHandler from './api/calendar/events.js';
 
-export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-    {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  for (const [key, value] of Object.entries(env)) {
+    process.env[key] ??= value;
+  }
+
+  return {
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
       name: 'ludashboard-ai-api-dev',
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
@@ -32,11 +43,31 @@ export default defineConfig({
             await musicSearchHandler(req, res);
             return;
           }
+          if (pathname === '/api/calendar/connect') {
+            await calendarConnectHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/calendar/callback') {
+            await calendarCallbackHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/calendar/accounts') {
+            await calendarAccountsHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/calendar/calendars') {
+            await calendarCalendarsHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/calendar/events') {
+            await calendarEventsHandler(req, res);
+            return;
+          }
           next();
         });
       },
-    },
-    VitePWA({
+      },
+      VitePWA({
       registerType: 'autoUpdate',
       includeAssets: [
         'icon-192.svg',
@@ -123,11 +154,12 @@ export default defineConfig({
       devOptions: {
         enabled: true, // Enable PWA in dev for testing
       },
-    }),
-  ],
-  resolve: {
-    alias: {
-      '@': '/src',
+      }),
+    ],
+    resolve: {
+      alias: {
+        '@': '/src',
+      },
     },
-  },
+  };
 });
