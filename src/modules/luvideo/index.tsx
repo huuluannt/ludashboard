@@ -13,6 +13,8 @@ const AUTOPLAY_KEY = 'luvideo_autoplay';
 const PLAYLISTS_KEY = 'luvideo_playlists';
 const PLAYLISTS_UPDATED_AT_KEY = 'luvideo_playlists_updated_at';
 const ACTIVE_PLAYLIST_KEY = 'luvideo_active_playlist';
+const VOLUME_KEY = 'luvideo_volume';
+const LAST_VOLUME_KEY = 'luvideo_last_volume';
 const DEFAULT_QUERY = 'trending music';
 
 interface LuVideoPlaylistsCloudValue {
@@ -42,6 +44,8 @@ export default function LuVideoModule() {
   const [error, setError] = useState<string | null>(null);
   const [ytReady, setYtReady] = useState(Boolean(window.YT?.Player));
   const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolumeState] = useState(loadStoredVolume);
+  const [lastVolume, setLastVolume] = useState(loadStoredLastVolume);
 
   // Playlist Mode States
   const [viewMode, setViewMode] = useState<'search' | 'playlists'>(() =>
@@ -237,6 +241,28 @@ export default function LuVideoModule() {
 
   const currentVideo = currentIndex >= 0 ? activeVideos[currentIndex] ?? null : null;
 
+  const setVolume = useCallback((nextVolume: number) => {
+    const boundedVolume = Math.max(0, Math.min(100, nextVolume));
+    setVolumeState(boundedVolume);
+    localStorage.setItem(VOLUME_KEY, String(boundedVolume));
+
+    if (boundedVolume > 0) {
+      setLastVolume(boundedVolume);
+      localStorage.setItem(LAST_VOLUME_KEY, String(boundedVolume));
+    }
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    if (volume > 0) {
+      setLastVolume(volume);
+      localStorage.setItem(LAST_VOLUME_KEY, String(volume));
+      setVolume(0);
+      return;
+    }
+
+    setVolume(lastVolume > 0 ? lastVolume : 70);
+  }, [lastVolume, setVolume, volume]);
+
   useEffect(() => {
     const emitState = () => {
       window.dispatchEvent(
@@ -245,6 +271,7 @@ export default function LuVideoModule() {
             currentVideo,
             isPlaying,
             hasVideo: Boolean(currentVideo),
+            volume,
           },
         }),
       );
@@ -253,11 +280,12 @@ export default function LuVideoModule() {
     emitState();
     window.addEventListener('luvideo:request-state', emitState);
     return () => window.removeEventListener('luvideo:request-state', emitState);
-  }, [currentVideo, isPlaying]);
+  }, [currentVideo, isPlaying, volume]);
 
   useEffect(() => {
     const handleControl = (event: Event) => {
-      const action = (event as CustomEvent<{ action?: string }>).detail?.action;
+      const detail = (event as CustomEvent<{ action?: string; volume?: number }>).detail;
+      const action = detail?.action;
       if (!action) return;
 
       if (action === 'play') {
@@ -284,12 +312,22 @@ export default function LuVideoModule() {
 
       if (action === 'previous') {
         navigate(-1);
+        return;
+      }
+
+      if (action === 'volume') {
+        setVolume(Number(detail.volume ?? volume));
+        return;
+      }
+
+      if (action === 'toggleMute') {
+        toggleMute();
       }
     };
 
     window.addEventListener('luvideo:control', handleControl);
     return () => window.removeEventListener('luvideo:control', handleControl);
-  }, [activeVideos.length, currentIndex, navigate]);
+  }, [activeVideos.length, currentIndex, navigate, setVolume, toggleMute, volume]);
 
   useEffect(() => {
     if (currentIndex === -1 || !activeVideos[currentIndex]) return;
@@ -322,6 +360,11 @@ export default function LuVideoModule() {
         enablejsapi: 1,
       },
       events: {
+        onReady: (event: any) => {
+          event.target.setVolume(volume);
+          if (volume <= 0) event.target.mute?.();
+          else event.target.unMute?.();
+        },
         onStateChange: onPlayerStateChange,
         onError: (e: any) => {
           console.error('YT Player Error:', e.data);
@@ -332,6 +375,17 @@ export default function LuVideoModule() {
       },
     });
   };
+
+  useEffect(() => {
+    if (!playerRef.current) return;
+    try {
+      playerRef.current.setVolume(volume);
+      if (volume <= 0) playerRef.current.mute?.();
+      else playerRef.current.unMute?.();
+    } catch {
+      // Ignore volume updates while the YouTube iframe is still booting.
+    }
+  }, [volume]);
 
   const updatePlaylists = useCallback((updater: Playlist[] | ((current: Playlist[]) => Playlist[])) => {
     const updatedAt = Date.now();
@@ -948,4 +1002,14 @@ function loadStoredPlaylistsUpdatedAt() {
 function loadStoredActivePlaylistId() {
   const stored = localStorage.getItem(ACTIVE_PLAYLIST_KEY);
   return stored && stored.trim() ? stored : null;
+}
+
+function loadStoredVolume() {
+  const stored = Number(localStorage.getItem(VOLUME_KEY));
+  return Number.isFinite(stored) ? Math.max(0, Math.min(100, stored)) : 70;
+}
+
+function loadStoredLastVolume() {
+  const stored = Number(localStorage.getItem(LAST_VOLUME_KEY));
+  return Number.isFinite(stored) && stored > 0 ? Math.max(1, Math.min(100, stored)) : 70;
 }

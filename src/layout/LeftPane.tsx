@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import type { DragEvent, SyntheticEvent } from 'react';
+import type { DragEvent, KeyboardEvent, SyntheticEvent } from 'react';
 import { useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
 import { useUserStore } from '@/state/userStore';
@@ -41,11 +41,15 @@ export default function LeftPane() {
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchAreaRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [editingModule, setEditingModule] = useState<EditableModule | null>(null);
   const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
+  const [showAllModules, setShowAllModules] = useState(false);
+  const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
+  const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
 
   const importedModules = useModuleStore((s) => s.importedModules);
   const registryVersion = useModuleStore((s) => s.registryVersion);
@@ -78,6 +82,17 @@ export default function LeftPane() {
     return () => document.removeEventListener('mousedown', handler);
   }, [dropdownOpen]);
 
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (searchAreaRef.current && !searchAreaRef.current.contains(event.target as Node)) {
+        setSearchOverlayOpen(false);
+      }
+    };
+
+    if (searchOverlayOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [searchOverlayOpen]);
+
   const allModules = useMemo(() => moduleRegistry.getAll(), [registryVersion]);
   const hasLuMusicTab = tabs.some((tab) => tab.moduleId === 'lumusic');
   const hasLuVideoTab = tabs.some((tab) => tab.moduleId === 'luvideo');
@@ -100,28 +115,44 @@ export default function LeftPane() {
     });
   }, [allModules, moduleOrderIds]);
 
-  // Filter & sort: pinned first, then search
-  const filtered = useMemo(() => {
+  const pinnedModules = useMemo(
+    () => orderedModules.filter((mod) => pinnedModuleIds.includes(mod.manifest.id)),
+    [orderedModules, pinnedModuleIds],
+  );
+
+  const unpinnedModules = useMemo(
+    () => orderedModules.filter((mod) => !pinnedModuleIds.includes(mod.manifest.id)),
+    [orderedModules, pinnedModuleIds],
+  );
+
+  const sidebarModules = useMemo(() => {
+    if (collapsed) return pinnedModules.length > 0 ? pinnedModules : orderedModules;
+    return showAllModules ? [...pinnedModules, ...unpinnedModules] : pinnedModules;
+  }, [collapsed, orderedModules, pinnedModules, showAllModules, unpinnedModules]);
+
+  const searchResults = useMemo(() => {
     const q = searchQuery.trim();
-    let list = orderedModules;
-    if (q) {
-      list = orderedModules
-        .map((mod, index) => ({
-          mod,
-          index,
-          score: getSearchScore(
-            `${mod.manifest.title} ${mod.manifest.category} ${mod.manifest.description}`,
-            q,
-          ),
-        }))
-        .filter((item) => item.score > 0)
-        .sort((a, b) => b.score - a.score || a.index - b.index)
-        .map((item) => item.mod);
-    }
-    const pinned = list.filter((m) => pinnedModuleIds.includes(m.manifest.id));
-    const unpinned = list.filter((m) => !pinnedModuleIds.includes(m.manifest.id));
-    return { pinned, unpinned };
-  }, [orderedModules, searchQuery, pinnedModuleIds]);
+    if (!q) return [];
+
+    return orderedModules
+      .map((mod, index) => ({
+        mod,
+        index,
+        score: getSearchScore(
+          `${mod.manifest.title} ${mod.manifest.category} ${mod.manifest.description}`,
+          q,
+        ),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+      .map((item) => item.mod);
+  }, [orderedModules, searchQuery]);
+
+  useEffect(() => {
+    setSelectedSearchIndex(0);
+  }, [searchQuery, searchResults.length]);
+
+  const searchOverlayVisible = searchOverlayOpen && searchQuery.trim().length > 0;
 
   const handleLogoReload = () => {
     if (window.location.href === HOME_URL) {
@@ -133,6 +164,44 @@ export default function LeftPane() {
 
   const handleOpenModule = (mod: (typeof allModules)[0]) => {
     openModuleFromShell(mod, importedModules, openTab);
+  };
+
+  const handleOpenSearchResult = (mod: (typeof allModules)[0]) => {
+    handleOpenModule(mod);
+    setSearchOverlayOpen(false);
+    setSearchQuery('');
+  };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!searchQuery.trim()) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSearchOverlayOpen(true);
+      setSelectedSearchIndex((index) => Math.min(index + 1, Math.max(0, searchResults.length - 1)));
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSearchOverlayOpen(true);
+      setSelectedSearchIndex((index) => Math.max(0, index - 1));
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selectedModule = searchResults[selectedSearchIndex] ?? searchResults[0];
+      if (selectedModule) handleOpenSearchResult(selectedModule);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSearchOverlayOpen(false);
+      setSearchQuery('');
+      searchInputRef.current?.blur();
+    }
   };
 
   const handleEditModule = (mod: (typeof allModules)[0], importedMod: ImportedModule | null) => {
@@ -247,7 +316,7 @@ export default function LeftPane() {
       {/* ─── Search ─── */}
       {!collapsed && (
         <div className="px-3 pb-2 flex-shrink-0">
-          <div className="relative">
+          <div className="relative" ref={searchAreaRef}>
             <Icon
               name="search"
               size={14}
@@ -256,30 +325,91 @@ export default function LeftPane() {
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search modules…"
+              placeholder="Search modules..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={(e) => e.currentTarget.select()}
-              onClick={(e) => e.currentTarget.select()}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSearchOverlayOpen(Boolean(e.target.value.trim()));
+              }}
+              onFocus={(e) => {
+                e.currentTarget.select();
+                if (e.currentTarget.value.trim()) setSearchOverlayOpen(true);
+              }}
+              onClick={(e) => {
+                e.currentTarget.select();
+                if (e.currentTarget.value.trim()) setSearchOverlayOpen(true);
+              }}
+              onKeyDown={handleSearchKeyDown}
               className="
                 w-full h-8 pl-8 pr-7 rounded-lg
-                bg-[var(--color-surface-muted)] border border-transparent
+                bg-[var(--color-surface-muted)] border border-black/35
                 text-xs text-[var(--color-text-primary)]
                 placeholder:text-[var(--color-text-tertiary)]
-                focus:outline-none focus:border-[var(--color-accent)]
-                transition-colors
+                focus:outline-none focus:border-black focus:bg-white
+                transition-colors shadow-sm
               "
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => {
                   setSearchQuery('');
+                  setSearchOverlayOpen(false);
                   searchInputRef.current?.focus();
                 }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] transition-colors cursor-pointer"
+                title="Clear search"
               >
                 <Icon name="x" size={12} />
               </button>
+            )}
+            {searchOverlayVisible && (
+              <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[50vh] overflow-y-auto rounded-xl border border-[var(--color-border)] bg-white p-1.5 shadow-xl">
+                {searchResults.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-[11px] text-[var(--color-text-tertiary)]">
+                    No matching modules
+                  </div>
+                ) : (
+                  searchResults.map((mod, index) => {
+                    const selected = index === selectedSearchIndex;
+                    return (
+                      <button
+                        key={mod.manifest.id}
+                        type="button"
+                        onMouseEnter={() => setSelectedSearchIndex(index)}
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          handleOpenSearchResult(mod);
+                        }}
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${
+                          selected
+                            ? 'bg-[var(--color-text-primary)] text-white'
+                            : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-subtle)]'
+                        }`}
+                      >
+                        <span
+                          className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border ${
+                            selected
+                              ? 'border-white/20 bg-white/10 text-white'
+                              : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] text-[var(--color-text-secondary)]'
+                          }`}
+                        >
+                          <Icon name={mod.manifest.icon} size={17} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-semibold">{mod.manifest.title}</span>
+                          <span className={`block truncate text-[10px] ${selected ? 'text-white/60' : 'text-[var(--color-text-tertiary)]'}`}>
+                            {mod.manifest.description}
+                          </span>
+                        </span>
+                        {pinnedModuleIds.includes(mod.manifest.id) && (
+                          <Icon name="pin" size={12} className={selected ? 'text-white/55' : 'text-[var(--color-text-tertiary)]'} />
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -310,51 +440,35 @@ export default function LeftPane() {
       )}
 
       <div className="flex-1 overflow-y-auto px-1.5 py-1">
-        {/* Pinned section */}
-        {filtered.pinned.length > 0 && (
-          <>
-            {!collapsed && (
-              <div className="px-2 pt-1 pb-1.5">
-                <span className="text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
-                  Pinned
-                </span>
-              </div>
-            )}
-            {filtered.pinned.map((mod) => (
-              <ModuleCard
-                key={mod.manifest.id}
-                mod={mod}
-                collapsed={collapsed}
-                isPinned
-                importedMod={importedModuleMap.get(mod.manifest.id) ?? null}
-                isDragging={draggedModuleId === mod.manifest.id}
-                onOpen={() => handleOpenModule(mod)}
-                onTogglePin={() => togglePin(mod.manifest.id)}
-                onDragStart={() => setDraggedModuleId(mod.manifest.id)}
-                onDragEnd={() => setDraggedModuleId(null)}
-                onDrop={() => handleReorderModules(mod.manifest.id)}
-                onEdit={(importedMod) => handleEditModule(mod, importedMod)}
-                onDelete={handleDeleteModule}
-              />
-            ))}
-            {!collapsed && <div className="mx-2 my-1.5 border-b border-[var(--color-border-subtle)]" />}
-          </>
-        )}
-
-        {/* Unpinned section */}
-        {!collapsed && filtered.unpinned.length > 0 && filtered.pinned.length > 0 && (
-          <div className="px-2 pt-1 pb-1.5">
+        {!collapsed && (
+          <div className="flex items-center px-2 pt-4 pb-2">
             <span className="text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
-              All Modules
+              {showAllModules ? 'All Modules' : 'Pinned'}
             </span>
+            <button
+              type="button"
+              onClick={() => setShowAllModules((value) => !value)}
+              className="ml-auto rounded-md px-1.5 py-1 text-[11px] font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-white"
+            >
+              {showAllModules ? 'Pinned' : 'View All'}
+            </button>
           </div>
         )}
-        {filtered.unpinned.map((mod) => (
+
+        {sidebarModules.length === 0 && !collapsed ? (
+          <div className="mx-2 rounded-xl border border-dashed border-[var(--color-border)] px-3 py-5 text-center">
+            <p className="text-[11px] leading-5 text-[var(--color-text-tertiary)]">
+              No pinned modules yet. Use View All and pin your favorites.
+            </p>
+          </div>
+        ) : null}
+
+        {sidebarModules.map((mod) => (
           <ModuleCard
             key={mod.manifest.id}
             mod={mod}
             collapsed={collapsed}
-            isPinned={false}
+            isPinned={pinnedModuleIds.includes(mod.manifest.id)}
             importedMod={importedModuleMap.get(mod.manifest.id) ?? null}
             isDragging={draggedModuleId === mod.manifest.id}
             onOpen={() => handleOpenModule(mod)}

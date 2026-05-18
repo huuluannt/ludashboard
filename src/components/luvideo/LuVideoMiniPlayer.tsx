@@ -1,4 +1,4 @@
-import { Pause, Play, PlayCircle, SkipBack, SkipForward } from 'lucide-react';
+import { Pause, Play, PlayCircle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { VideoItem } from '@/modules/luvideo/types';
 
@@ -6,12 +6,14 @@ interface LuVideoMiniState {
   currentVideo: VideoItem | null;
   isPlaying: boolean;
   hasVideo: boolean;
+  volume: number;
 }
 
 const EMPTY_STATE: LuVideoMiniState = {
   currentVideo: null,
   isPlaying: false,
   hasVideo: false,
+  volume: 70,
 };
 
 export default function LuVideoMiniPlayer() {
@@ -25,6 +27,7 @@ export default function LuVideoMiniPlayer() {
         currentVideo: detail.currentVideo ?? null,
         isPlaying: Boolean(detail.isPlaying),
         hasVideo: Boolean(detail.hasVideo),
+        volume: typeof detail.volume === 'number' && Number.isFinite(detail.volume) ? detail.volume : EMPTY_STATE.volume,
       });
     };
 
@@ -35,6 +38,14 @@ export default function LuVideoMiniPlayer() {
 
   const sendControl = (action: 'play' | 'pause' | 'next' | 'previous') => {
     window.dispatchEvent(new CustomEvent('luvideo:control', { detail: { action } }));
+  };
+
+  const sendVolume = (volume: number) => {
+    window.dispatchEvent(new CustomEvent('luvideo:control', { detail: { action: 'volume', volume } }));
+  };
+
+  const toggleMute = () => {
+    window.dispatchEvent(new CustomEvent('luvideo:control', { detail: { action: 'toggleMute' } }));
   };
 
   const video = state.currentVideo;
@@ -92,6 +103,28 @@ export default function LuVideoMiniPlayer() {
           >
             <SkipForward size={13} fill="currentColor" />
           </button>
+        </div>
+
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="flex h-6 w-6 items-center justify-center rounded-lg text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+            title={state.volume > 0 ? 'Mute video' : 'Unmute video'}
+            aria-label={state.volume > 0 ? 'Mute video' : 'Unmute video'}
+          >
+            {state.volume > 0 ? <Volume2 size={14} /> : <VolumeX size={14} />}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={state.volume}
+            onChange={(event) => sendVolume(Number(event.currentTarget.value))}
+            className="h-1 min-w-0 flex-1 accent-[#e8ff47]"
+            aria-label="LuVideo volume"
+          />
+          <span className="w-7 text-[9px] text-white/45">{state.volume}</span>
         </div>
       </div>
     </div>
