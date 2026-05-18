@@ -4,6 +4,7 @@ import { useModuleStore } from '@/state/moduleStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import Icon from '@/components/Icon';
 import { openModuleFromShell } from '@/modules/openModule';
+import { ModuleSurfaceProvider } from './ModuleSurfaceContext';
 
 export default function RightPane() {
   const activeTabId = useTabStore((s) => s.activeTabId);
@@ -75,7 +76,9 @@ export default function RightPane() {
             className="absolute inset-0 overflow-auto"
             style={{ display: tab.moduleId === activeTabId ? 'block' : 'none' }}
           >
-            <Comp />
+            <ModuleSurfaceProvider surface="main">
+              <Comp />
+            </ModuleSurfaceProvider>
           </div>
         );
       })}

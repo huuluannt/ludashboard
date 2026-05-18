@@ -81,33 +81,56 @@ export default function QuickNoteButton() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-[70] mt-1 w-[min(310px,calc(100vw-1rem))] rounded-xl border-2 border-neutral-500 bg-white p-2 shadow-xl">
-          <div className="mb-2 flex items-center gap-2">
-            <p className="flex-1 text-lg font-medium leading-none text-black">Notes</p>
+        <div className="absolute right-0 top-full z-[70] mt-1 w-[min(280px,calc(100vw-1rem))] rounded-xl border border-[var(--color-border)] bg-white p-2 shadow-xl shadow-black/10">
+          <div className="mb-1.5 flex h-7 items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              <Icon name="sticky-note" size={13} className="text-[var(--color-accent)]" />
+              <p className="truncate text-xs font-semibold text-[var(--color-text-primary)]">Quick note</p>
+            </div>
             <button
               type="button"
               onClick={saveQuickNote}
               disabled={!content.trim() || saving}
-              className="rounded-md bg-neutral-900 px-4 py-1 text-sm font-semibold leading-none text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-7 rounded-lg bg-[var(--color-text-primary)] px-2.5 text-[11px] font-semibold leading-none text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
             >
               {saving ? 'Saving' : 'Save'}
             </button>
           </div>
 
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(event) => setContent(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') setOpen(false);
-              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-                event.preventDefault();
-                saveQuickNote();
-              }
-            }}
-            className="h-32 w-full resize-none rounded-lg border-2 border-neutral-400 bg-white px-3 py-2 text-base leading-6 text-black outline-none focus:border-neutral-700"
-            placeholder=""
-          />
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={(event) => setContent(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setOpen(false);
+                if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                  event.preventDefault();
+                  saveQuickNote();
+                }
+              }}
+              className="h-24 w-full resize-none rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2.5 py-2 pr-8 text-xs leading-5 text-[var(--color-text-primary)] outline-none transition-colors placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-accent)] focus:bg-white"
+              placeholder="Write something..."
+            />
+            {content && (
+              <button
+                type="button"
+                onClick={() => {
+                  setContent('');
+                  textareaRef.current?.focus();
+                }}
+                className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md text-[var(--color-text-tertiary)] transition-colors hover:bg-white hover:text-[var(--color-text-primary)]"
+                title="Clear note"
+              >
+                <Icon name="x" size={12} />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-1.5 flex items-center justify-between text-[9px] text-[var(--color-text-tertiary)]">
+            <span>Ctrl+Enter to save</span>
+            <span>{content.length.toLocaleString()}</span>
+          </div>
         </div>
       )}
     </div>

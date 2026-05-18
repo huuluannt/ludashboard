@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '@/components/Icon';
+import { useModuleSurface } from '@/layout/ModuleSurfaceContext';
 import type { ChatMessage, ChatResponse } from '@/types/ai';
+
+const RIGHT_SIDEBAR_CHAT_CLEAR_EVENT = 'lu:right-sidebar:clear-chat';
 
 interface ChatPanelProps {
   title: string;
@@ -29,6 +32,7 @@ export default function ChatPanel({
   emptyDescription,
   sendMessage,
 }: ChatPanelProps) {
+  const compact = useModuleSurface() === 'right-sidebar';
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadStoredMessages(storageKey));
   const [input, setInput] = useState('');
   const [model, setModel] = useState(defaultModel);
@@ -57,6 +61,12 @@ export default function ChatPanel({
     setInput('');
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!compact) return;
+    window.addEventListener(RIGHT_SIDEBAR_CHAT_CLEAR_EVENT, clearChat);
+    return () => window.removeEventListener(RIGHT_SIDEBAR_CHAT_CLEAR_EVENT, clearChat);
+  }, [clearChat, compact]);
 
   const submit = useCallback(async () => {
     const prompt = input.trim();
@@ -95,45 +105,62 @@ export default function ChatPanel({
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-white text-[var(--color-text-primary)]">
-      <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-[var(--color-border-subtle)] px-4">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
-          <Icon name={icon} size={18} />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">{title}</h2>
-          <p className="truncate text-xs text-[var(--color-text-tertiary)]">
-            {provider} | {model}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={clearChat}
-          disabled={messages.length === 0 || loading}
-          className="ml-auto flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-danger)] disabled:cursor-not-allowed disabled:opacity-35"
-        >
-          <Icon name="trash" size={14} />
-          Clear
-        </button>
-      </header>
+      {!compact && (
+        <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-[var(--color-border-subtle)] px-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
+            <Icon name={icon} size={18} />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">{title}</h2>
+            <p className="truncate text-xs text-[var(--color-text-tertiary)]">
+              {provider} | {model}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearChat}
+            disabled={messages.length === 0 || loading}
+            className="ml-auto flex h-9 items-center gap-2 rounded-xl px-3 text-xs font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-danger)] disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <Icon name="trash" size={14} />
+            Clear
+          </button>
+        </header>
+      )}
 
-      <main ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-surface-muted)] px-4 py-5">
+      <main
+        ref={scrollRef}
+        className={`min-h-0 flex-1 overflow-y-auto bg-[var(--color-surface-muted)] ${
+          compact ? 'px-3 py-3' : 'px-4 py-5'
+        }`}
+      >
         {visibleMessages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-center">
-            <div className="max-w-sm">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--color-border)] bg-white text-[var(--color-accent)]">
-                <Icon name={icon} size={24} />
+            <div className={compact ? 'max-w-[260px]' : 'max-w-sm'}>
+              <div
+                className={`mx-auto flex items-center justify-center border border-[var(--color-border)] bg-white text-[var(--color-accent)] ${
+                  compact ? 'mb-3 h-10 w-10 rounded-xl' : 'mb-4 h-14 w-14 rounded-2xl'
+                }`}
+              >
+                <Icon name={icon} size={compact ? 18 : 24} />
               </div>
-              <h3 className="text-base font-semibold">{emptyTitle}</h3>
-              <p className="mt-2 text-sm leading-6 text-[var(--color-text-tertiary)]">{emptyDescription}</p>
+              <h3 className={compact ? 'text-sm font-semibold' : 'text-base font-semibold'}>{emptyTitle}</h3>
+              <p className={`mt-2 text-[var(--color-text-tertiary)] ${compact ? 'text-xs leading-5' : 'text-sm leading-6'}`}>
+                {emptyDescription}
+              </p>
             </div>
           </div>
         ) : (
-          <div className="mx-auto flex max-w-4xl flex-col gap-3">
+          <div className={`mx-auto flex flex-col ${compact ? 'max-w-full gap-2' : 'max-w-4xl gap-3'}`}>
             {visibleMessages.map((message, index) => (
-              <MessageBubble key={`${message.role}-${index}`} message={message} />
+              <MessageBubble key={`${message.role}-${index}`} message={message} compact={compact} />
             ))}
             {loading && (
-              <div className="flex items-center gap-2 self-start rounded-2xl border border-[var(--color-border-subtle)] bg-white px-4 py-3 text-sm text-[var(--color-text-tertiary)]">
+              <div
+                className={`flex items-center gap-2 self-start border border-[var(--color-border-subtle)] bg-white text-[var(--color-text-tertiary)] ${
+                  compact ? 'rounded-xl px-3 py-2 text-xs' : 'rounded-2xl px-4 py-3 text-sm'
+                }`}
+              >
                 <span className="h-2 w-2 animate-pulse rounded-full bg-[var(--color-accent)]" />
                 Thinking...
               </div>
@@ -142,14 +169,18 @@ export default function ChatPanel({
         )}
       </main>
 
-      <footer className="flex-shrink-0 border-t border-[var(--color-border-subtle)] bg-white p-4">
+      <footer className={`flex-shrink-0 border-t border-[var(--color-border-subtle)] bg-white ${compact ? 'p-3' : 'p-4'}`}>
         <div className="mx-auto max-w-4xl">
           {error && (
-            <div className="mb-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-[var(--color-danger)]">
+            <div
+              className={`mb-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[var(--color-danger)] ${
+                compact ? 'text-xs' : 'text-sm'
+              }`}
+            >
               {error}
             </div>
           )}
-          <div className="flex items-end gap-3">
+          <div className={`flex items-end ${compact ? 'gap-2' : 'gap-3'}`}>
             <textarea
               ref={inputRef}
               value={input}
@@ -160,22 +191,28 @@ export default function ChatPanel({
                   submit();
                 }
               }}
-              rows={3}
+              rows={compact ? 2 : 3}
               maxLength={maxPromptLength}
               placeholder={placeholder}
-              className="max-h-40 min-h-20 flex-1 resize-none rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-4 py-3 text-sm leading-6 outline-none transition-colors placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-accent)] focus:bg-white"
+              className={`flex-1 resize-none border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] outline-none transition-colors placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-accent)] focus:bg-white ${
+                compact
+                  ? 'max-h-28 min-h-14 rounded-xl px-3 py-2 text-xs leading-5'
+                  : 'max-h-40 min-h-20 rounded-2xl px-4 py-3 text-sm leading-6'
+              }`}
             />
             <button
               type="button"
               onClick={submit}
               disabled={loading || !input.trim()}
-              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-[var(--color-text-primary)] text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+              className={`flex flex-shrink-0 items-center justify-center bg-[var(--color-text-primary)] text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40 ${
+                compact ? 'h-9 w-9 rounded-xl' : 'h-11 w-11 rounded-2xl'
+              }`}
               title="Send"
             >
-              <Icon name="navigation" size={16} />
+              <Icon name="navigation" size={compact ? 14 : 16} />
             </button>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--color-text-tertiary)]">
+          <div className={`mt-2 flex items-center justify-between text-[var(--color-text-tertiary)] ${compact ? 'text-[9px]' : 'text-[10px]'}`}>
             <span>Enter to send, Shift+Enter for new line</span>
             <span>{input.length.toLocaleString()} / {maxPromptLength.toLocaleString()}</span>
           </div>
@@ -185,13 +222,17 @@ export default function ChatPanel({
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ message, compact }: { message: ChatMessage; compact: boolean }) {
   const isUser = message.role === 'user';
 
   return (
     <article className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
-        className={`max-w-[min(760px,85%)] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 shadow-sm ${
+        className={`whitespace-pre-wrap shadow-sm ${
+          compact
+            ? 'max-w-[88%] rounded-xl px-3 py-2 text-xs leading-5'
+            : 'max-w-[min(760px,85%)] rounded-2xl px-4 py-3 text-sm leading-6'
+        } ${
           isUser
             ? 'bg-[var(--color-text-primary)] text-white'
             : 'border border-[var(--color-border-subtle)] bg-white text-[var(--color-text-primary)]'

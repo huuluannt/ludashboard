@@ -3,8 +3,11 @@ import Icon from '@/components/Icon';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import { useModuleStore } from '@/state/moduleStore';
 import { useRightSidebarStore } from '@/state/rightSidebarStore';
+import { ModuleSurfaceProvider } from './ModuleSurfaceContext';
 
-const DRAWER_WIDTH = 'min(560px, calc(100vw - 28px))';
+const DRAWER_WIDTH = 'min(520px, calc(100vw - 18px))';
+const CHAT_CLEAR_EVENT = 'lu:right-sidebar:clear-chat';
+
 export default function RightSidebarDrawer() {
   const enabled = useRightSidebarStore((s) => s.enabled);
   const visible = useRightSidebarStore((s) => s.visible);
@@ -29,6 +32,13 @@ export default function RightSidebarDrawer() {
   }, [moduleId, selectedModule, setModuleId]);
 
   const ActiveComponent = selectedModule?.component ?? null;
+  const supportsChatClear = selectedModule
+    ? ['luchat', 'lugemini'].includes(selectedModule.manifest.id)
+    : false;
+
+  const clearActiveChat = () => {
+    window.dispatchEvent(new CustomEvent(CHAT_CLEAR_EVENT));
+  };
 
   if (!enabled) {
     return null;
@@ -45,7 +55,7 @@ export default function RightSidebarDrawer() {
 
       <aside
         className={`
-          pointer-events-auto absolute bottom-3 right-3 top-12 flex flex-col overflow-hidden rounded-2xl
+          pointer-events-auto absolute bottom-2 right-2 top-12 flex flex-col overflow-hidden rounded-xl
           border border-[var(--color-border)] bg-white shadow-2xl
           transition-transform duration-300 ease-out
         `}
@@ -54,26 +64,18 @@ export default function RightSidebarDrawer() {
           transform: visible ? 'translateX(0)' : 'translateX(calc(100% + 24px))',
         }}
       >
-        <header className="flex h-14 flex-shrink-0 items-center gap-3 border-b border-[var(--color-border-subtle)] bg-white px-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
-            <Icon name={selectedModule?.manifest.icon ?? 'panel-right'} size={16} />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-semibold text-[var(--color-text-primary)]">Right Sidebar</p>
-              {selectedModule && (
-                <span className="rounded-md bg-[var(--color-surface-muted)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--color-text-tertiary)]">
-                  {selectedModule.manifest.title}
-                </span>
-              )}
-            </div>
+        <header className="flex h-11 flex-shrink-0 items-center gap-2 border-b border-[var(--color-border-subtle)] bg-white px-2.5">
+          <div
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)]"
+            title={selectedModule?.manifest.title ?? 'Right sidebar module'}
+          >
+            <Icon name={selectedModule?.manifest.icon ?? 'panel-right'} size={15} />
           </div>
 
           <select
             value={selectedModule?.manifest.id ?? ''}
             onChange={(event) => setModuleId(event.target.value)}
-            className="h-8 max-w-[210px] rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs font-medium text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-accent)] focus:bg-white"
+            className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs font-medium text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-accent)] focus:bg-white"
             title="Choose quick module"
           >
             {modules.map((mod) => (
@@ -83,10 +85,22 @@ export default function RightSidebarDrawer() {
             ))}
           </select>
 
+          {supportsChatClear && (
+            <button
+              type="button"
+              onClick={clearActiveChat}
+              className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-danger)]"
+              title="Clear chat"
+            >
+              <Icon name="trash" size={13} />
+              Clear
+            </button>
+          )}
+
           <button
             type="button"
             onClick={closeFully}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
             title="Close right sidebar"
           >
             <Icon name="x" size={15} />
@@ -95,7 +109,9 @@ export default function RightSidebarDrawer() {
 
         <div className="min-h-0 flex-1 overflow-hidden bg-white">
           {ActiveComponent ? (
-            <ActiveComponent />
+            <ModuleSurfaceProvider surface="right-sidebar">
+              <ActiveComponent />
+            </ModuleSurfaceProvider>
           ) : (
             <div className="flex h-full items-center justify-center text-center">
               <div>

@@ -8,6 +8,8 @@ import { useModuleStore } from '@/state/moduleStore';
 import type { ImportedModule } from '@/state/moduleStore';
 import Icon from '@/components/Icon';
 import ImportModuleModal from '@/components/ImportModuleModal';
+import MiniMusicPlayer from '@/components/lumusic/MiniMusicPlayer';
+import LuVideoMiniPlayer from '@/components/luvideo/LuVideoMiniPlayer';
 import type { EditableModule } from '@/components/ImportModuleModal';
 import { openModuleFromShell } from '@/modules/openModule';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
@@ -31,6 +33,7 @@ export default function LeftPane() {
 
   const openTab = useTabStore((s) => s.openTab);
   const closeTab = useTabStore((s) => s.closeTab);
+  const tabs = useTabStore((s) => s.tabs);
 
   const user = useUserStore((s) => s.user);
   const signOut = useUserStore((s) => s.signOut);
@@ -76,6 +79,8 @@ export default function LeftPane() {
   }, [dropdownOpen]);
 
   const allModules = useMemo(() => moduleRegistry.getAll(), [registryVersion]);
+  const hasLuMusicTab = tabs.some((tab) => tab.moduleId === 'lumusic');
+  const hasLuVideoTab = tabs.some((tab) => tab.moduleId === 'luvideo');
 
   const importedModuleMap = useMemo(
     () => new Map(importedModules.map((m) => [m.id, m])),
@@ -364,6 +369,9 @@ export default function LeftPane() {
       </div>
 
       {/* ─── Account Area ─── */}
+      {hasLuMusicTab && !collapsed && <MiniMusicPlayer />}
+      {hasLuVideoTab && !collapsed && <LuVideoMiniPlayer />}
+
       <div className="flex-shrink-0 border-t border-[var(--color-border-subtle)] relative" ref={dropdownRef}>
         {/* Upward dropdown */}
         {dropdownOpen && !collapsed && (

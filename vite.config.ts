@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import groqChatHandler from './api/ai/groq/chat.js';
 import geminiChatHandler from './api/ai/gemini/chat.js';
+import musicSearchHandler from './api/music/search.js';
 
 export default defineConfig({
   plugins: [
@@ -20,6 +21,10 @@ export default defineConfig({
           }
           if (pathname === '/api/ai/gemini/chat') {
             await geminiChatHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/music/search') {
+            await musicSearchHandler(req, res);
             return;
           }
           next();

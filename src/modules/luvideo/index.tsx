@@ -41,6 +41,7 @@ export default function LuVideoModule() {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ytReady, setYtReady] = useState(Boolean(window.YT?.Player));
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Playlist Mode States
   const [viewMode, setViewMode] = useState<'search' | 'playlists'>(() =>
@@ -210,20 +211,85 @@ export default function LuVideoModule() {
     setCurrentIndex(index);
   };
 
-  const navigate = (dir: number) => {
+  const navigate = useCallback((dir: number) => {
     const next = currentIndex + dir;
     if (next >= 0 && next < activeVideos.length) {
       setCurrentIndex(next);
     } else if (dir === 1 && activeVideos.length > 0) {
       setCurrentIndex(0); // Loop
     }
-  };
+  }, [activeVideos, currentIndex]);
 
   const onPlayerStateChange = useCallback((event: any) => {
+    if (event.data === 0) {
+      setIsPlaying(false);
+    }
     if (event.data === 0 && autoplay) { // YT.PlayerState.ENDED
       navigate(1);
     }
-  }, [autoplay, activeVideos.length, currentIndex]);
+    if (event.data === 1) {
+      setIsPlaying(true);
+    }
+    if (event.data === 2) {
+      setIsPlaying(false);
+    }
+  }, [autoplay, navigate]);
+
+  const currentVideo = currentIndex >= 0 ? activeVideos[currentIndex] ?? null : null;
+
+  useEffect(() => {
+    const emitState = () => {
+      window.dispatchEvent(
+        new CustomEvent('luvideo:state', {
+          detail: {
+            currentVideo,
+            isPlaying,
+            hasVideo: Boolean(currentVideo),
+          },
+        }),
+      );
+    };
+
+    emitState();
+    window.addEventListener('luvideo:request-state', emitState);
+    return () => window.removeEventListener('luvideo:request-state', emitState);
+  }, [currentVideo, isPlaying]);
+
+  useEffect(() => {
+    const handleControl = (event: Event) => {
+      const action = (event as CustomEvent<{ action?: string }>).detail?.action;
+      if (!action) return;
+
+      if (action === 'play') {
+        if (currentIndex === -1 && activeVideos.length > 0) {
+          setCurrentIndex(0);
+          setIsPlaying(true);
+          return;
+        }
+        playerRef.current?.playVideo?.();
+        setIsPlaying(true);
+        return;
+      }
+
+      if (action === 'pause') {
+        playerRef.current?.pauseVideo?.();
+        setIsPlaying(false);
+        return;
+      }
+
+      if (action === 'next') {
+        navigate(1);
+        return;
+      }
+
+      if (action === 'previous') {
+        navigate(-1);
+      }
+    };
+
+    window.addEventListener('luvideo:control', handleControl);
+    return () => window.removeEventListener('luvideo:control', handleControl);
+  }, [activeVideos.length, currentIndex, navigate]);
 
   useEffect(() => {
     if (currentIndex === -1 || !activeVideos[currentIndex]) return;
