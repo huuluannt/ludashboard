@@ -14,6 +14,7 @@ import InstallPrompt from '@/components/InstallPrompt';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import UpdatePrompt from '@/components/UpdatePrompt';
 import SyncIndicator from '@/components/SyncIndicator';
+import { useGlobalHotkeys } from '@/hooks/useGlobalHotkeys';
 
 /**
  * Root App component.
@@ -24,6 +25,7 @@ import SyncIndicator from '@/components/SyncIndicator';
  */
 export default function App() {
   const [ready, setReady] = useState(false);
+  useGlobalHotkeys();
 
   useEffect(() => {
     // Register built-in modules

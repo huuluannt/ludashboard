@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { DragEvent, KeyboardEvent, SyntheticEvent } from 'react';
 import { useSidebarStore } from '@/state/sidebarStore';
+import { useGlobalSearchStore, type GlobalSearchFocusOptions } from '@/state/globalSearchStore';
 import { useTabStore } from '@/state/tabStore';
 import { useUserStore } from '@/state/userStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
@@ -23,6 +24,7 @@ const VIETNAMESE_DAYS = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ
 export default function LeftPane() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
+  const setCollapsed = useSidebarStore((s) => s.setCollapsed);
   const searchQuery = useSidebarStore((s) => s.searchQuery);
   const setSearchQuery = useSidebarStore((s) => s.setSearchQuery);
   const pinnedModuleIds = useSidebarStore((s) => s.pinnedModuleIds);
@@ -44,12 +46,16 @@ export default function LeftPane() {
   const searchAreaRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const allFilterInputRef = useRef<HTMLInputElement>(null);
+  const collapsedRef = useRef(collapsed);
+  const searchOverlayOpenRef = useRef(false);
+  const hotkeyPulseTimeoutRef = useRef<number | null>(null);
   
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [editingModule, setEditingModule] = useState<EditableModule | null>(null);
   const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
   const [showAllModules, setShowAllModules] = useState(false);
   const [searchOverlayOpen, setSearchOverlayOpen] = useState(false);
+  const [searchHotkeyPulse, setSearchHotkeyPulse] = useState(false);
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
   const [allFilterQuery, setAllFilterQuery] = useState('');
   const [selectedFilterIndex, setSelectedFilterIndex] = useState(0);
@@ -73,6 +79,72 @@ export default function LeftPane() {
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    collapsedRef.current = collapsed;
+  }, [collapsed]);
+
+  useEffect(() => {
+    searchOverlayOpenRef.current = searchOverlayOpen;
+  }, [searchOverlayOpen]);
+
+  useEffect(() => {
+    const focusSearch = (options: GlobalSearchFocusOptions = {}) => {
+      const applyFocus = () => {
+        const input = searchInputRef.current;
+        searchAreaRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        setSearchOverlayOpen(Boolean(useSidebarStore.getState().searchQuery.trim()));
+        setSearchHotkeyPulse(true);
+
+        if (hotkeyPulseTimeoutRef.current != null) {
+          window.clearTimeout(hotkeyPulseTimeoutRef.current);
+        }
+
+        hotkeyPulseTimeoutRef.current = window.setTimeout(() => {
+          setSearchHotkeyPulse(false);
+          hotkeyPulseTimeoutRef.current = null;
+        }, 700);
+
+        window.requestAnimationFrame(() => {
+          input?.focus({ preventScroll: true });
+          if (options.select || input?.value.trim()) input?.select();
+        });
+      };
+
+      if (collapsedRef.current) {
+        setCollapsed(false);
+        window.setTimeout(applyFocus, 0);
+        return;
+      }
+
+      applyFocus();
+    };
+
+    const blurSearch = () => {
+      setSearchOverlayOpen(false);
+      setSearchHotkeyPulse(false);
+      searchInputRef.current?.blur();
+    };
+
+    const controller = {
+      focus: focusSearch,
+      blur: blurSearch,
+      containsTarget: (target: EventTarget | null) =>
+        target instanceof Node ? Boolean(searchAreaRef.current?.contains(target)) : false,
+      isFocused: () => document.activeElement === searchInputRef.current,
+      isOpen: () => searchOverlayOpenRef.current,
+    };
+
+    useGlobalSearchStore.getState().registerSearchController(controller);
+
+    return () => {
+      useGlobalSearchStore.getState().registerSearchController(null);
+      if (hotkeyPulseTimeoutRef.current != null) {
+        window.clearTimeout(hotkeyPulseTimeoutRef.current);
+        hotkeyPulseTimeoutRef.current = null;
+      }
+    };
+  }, [setCollapsed]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -204,6 +276,14 @@ export default function LeftPane() {
   };
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSearchOverlayOpen(false);
+      setSearchHotkeyPulse(false);
+      searchInputRef.current?.blur();
+      return;
+    }
+
     if (!searchQuery.trim()) return;
 
     if (event.key === 'ArrowDown') {
@@ -227,12 +307,6 @@ export default function LeftPane() {
       return;
     }
 
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      setSearchOverlayOpen(false);
-      setSearchQuery('');
-      searchInputRef.current?.blur();
-    }
   };
 
   const handleAllFilterKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -374,7 +448,12 @@ export default function LeftPane() {
       {/* ─── Search ─── */}
       {!collapsed && (
         <div className="px-3 pb-2 flex-shrink-0">
-          <div className="relative" ref={searchAreaRef}>
+          <div
+            className={`relative rounded-lg transition-shadow duration-200 ${
+              searchHotkeyPulse ? 'ring-2 ring-[var(--color-accent)]/25 shadow-[0_0_0_4px_rgba(67,97,238,0.10)]' : ''
+            }`}
+            ref={searchAreaRef}
+          >
             <Icon
               name="search"
               size={14}
@@ -383,6 +462,10 @@ export default function LeftPane() {
             <input
               ref={searchInputRef}
               type="text"
+              aria-label="Search modules"
+              aria-controls="global-search-results"
+              aria-expanded={searchOverlayVisible}
+              aria-keyshortcuts="Control+K /"
               placeholder="Search modules..."
               value={searchQuery}
               onChange={(e) => {
@@ -397,9 +480,10 @@ export default function LeftPane() {
                 e.currentTarget.select();
                 if (e.currentTarget.value.trim()) setSearchOverlayOpen(true);
               }}
+              onBlur={() => setSearchHotkeyPulse(false)}
               onKeyDown={handleSearchKeyDown}
               className="
-                w-full h-8 pl-8 pr-7 rounded-lg
+                w-full h-8 pl-8 pr-16 rounded-lg
                 bg-[var(--color-surface-muted)] border border-black/35
                 text-xs text-[var(--color-text-primary)]
                 placeholder:text-[var(--color-text-tertiary)]
@@ -407,6 +491,16 @@ export default function LeftPane() {
                 transition-colors shadow-sm
               "
             />
+            {!searchQuery && (
+              <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+                <kbd className="rounded border border-[var(--color-border)] bg-white px-1 py-0.5 text-[9px] font-medium leading-none text-[var(--color-text-tertiary)]">
+                  Ctrl K
+                </kbd>
+                <kbd className="rounded border border-[var(--color-border)] bg-white px-1 py-0.5 text-[9px] font-medium leading-none text-[var(--color-text-tertiary)]">
+                  /
+                </kbd>
+              </div>
+            )}
             {searchQuery && (
               <button
                 type="button"
@@ -422,7 +516,11 @@ export default function LeftPane() {
               </button>
             )}
             {searchOverlayVisible && (
-              <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[50vh] overflow-y-auto rounded-xl border border-[var(--color-border)] bg-white p-1.5 shadow-xl">
+              <div
+                id="global-search-results"
+                role="listbox"
+                className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[50vh] overflow-y-auto rounded-xl border border-[var(--color-border)] bg-white p-1.5 shadow-xl"
+              >
                 {searchResults.length === 0 ? (
                   <div className="px-3 py-4 text-center text-[11px] text-[var(--color-text-tertiary)]">
                     No matching modules
@@ -434,6 +532,8 @@ export default function LeftPane() {
                       <button
                         key={mod.manifest.id}
                         type="button"
+                        role="option"
+                        aria-selected={selected}
                         onMouseEnter={() => setSelectedSearchIndex(index)}
                         onMouseDown={(event) => {
                           event.preventDefault();

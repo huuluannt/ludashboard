@@ -10,6 +10,7 @@ interface SidebarStore {
 
   hydrate: () => Promise<void>;
   toggleCollapsed: () => void;
+  setCollapsed: (collapsed: boolean) => void;
   setSearchQuery: (q: string) => void;
   togglePin: (moduleId: string) => void;
   setModuleOrder: (moduleIds: string[]) => void;
@@ -36,6 +37,12 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
     const next = !get().collapsed;
     set({ collapsed: next });
     offlineStorage.setSidebarCollapsed(next);
+  },
+
+  setCollapsed(collapsed: boolean) {
+    if (get().collapsed === collapsed) return;
+    set({ collapsed });
+    offlineStorage.setSidebarCollapsed(collapsed);
   },
 
   setSearchQuery(q: string) {

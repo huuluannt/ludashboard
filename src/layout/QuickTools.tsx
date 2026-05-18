@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '@/components/Icon';
 
 const GOOGLE_URL = 'https://www.google.com/';
@@ -6,7 +6,7 @@ const USD_VND_RATE_URL = 'https://open.er-api.com/v6/latest/USD';
 const RATE_CACHE_KEY = 'ludashboard_usd_vnd_rate';
 const RATE_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 
-type QuickTool = 'money' | 'calculator';
+type QuickTool = 'translator' | 'money' | 'calculator';
 
 interface RateCache {
   rate: number;
@@ -21,7 +21,14 @@ export default function QuickTools() {
   const [rateCache, setRateCache] = useState<RateCache | null>(() => loadStoredRate());
   const [rateStatus, setRateStatus] = useState('');
   const [formula, setFormula] = useState('20*10');
+  const [translatorText, setTranslatorText] = useState('');
+  const [translation, setTranslation] = useState('');
+  const [translatorStatus, setTranslatorStatus] = useState('');
+  const [translatorModel, setTranslatorModel] = useState('');
+  const [isTranslating, setIsTranslating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const translatorInputRef = useRef<HTMLTextAreaElement>(null);
+  const translatorAbortRef = useRef<AbortController | null>(null);
   const moneyInputRef = useRef<HTMLInputElement>(null);
   const calculatorInputRef = useRef<HTMLInputElement>(null);
 
@@ -39,6 +46,11 @@ export default function QuickTools() {
   }, [openTool]);
 
   useEffect(() => {
+    if (openTool === 'translator') {
+      const timer = window.setTimeout(() => translatorInputRef.current?.focus(), 0);
+      return () => window.clearTimeout(timer);
+    }
+
     if (openTool === 'money') {
       const timer = window.setTimeout(() => moneyInputRef.current?.focus(), 0);
       return () => window.clearTimeout(timer);
@@ -51,6 +63,10 @@ export default function QuickTools() {
 
     return undefined;
   }, [openTool]);
+
+  useEffect(() => {
+    return () => translatorAbortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     if (openTool !== 'money') return;
@@ -103,6 +119,55 @@ export default function QuickTools() {
 
   const calculatorResult = useMemo(() => evaluateExpression(formula), [formula]);
 
+  const translateText = useCallback(async () => {
+    const text = translatorText.trim();
+    if (!text || isTranslating) return;
+
+    translatorAbortRef.current?.abort();
+    const controller = new AbortController();
+    translatorAbortRef.current = controller;
+
+    setIsTranslating(true);
+    setTranslatorStatus('Translating...');
+    setTranslation('');
+
+    try {
+      const response = await fetch('/api/ai/groq/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+        signal: controller.signal,
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Translation failed.');
+
+      setTranslation(String(data.translation || '').trim());
+      setTranslatorModel(String(data.model || 'Groq'));
+      setTranslatorStatus('');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setTranslatorStatus(error instanceof Error ? error.message : 'Translation failed.');
+    } finally {
+      if (translatorAbortRef.current === controller) {
+        translatorAbortRef.current = null;
+      }
+      setIsTranslating(false);
+    }
+  }, [isTranslating, translatorText]);
+
+  const clearTranslator = () => {
+    translatorAbortRef.current?.abort();
+    translatorAbortRef.current = null;
+    setTranslatorText('');
+    setTranslation('');
+    setTranslatorStatus('');
+    setTranslatorModel('');
+    setIsTranslating(false);
+    window.setTimeout(() => translatorInputRef.current?.focus(), 0);
+  };
+
+  const setTranslatorOpen = () => setOpenTool((tool) => (tool === 'translator' ? null : 'translator'));
   const setMoneyOpen = () => setOpenTool((tool) => (tool === 'money' ? null : 'money'));
   const setCalculatorOpen = () => setOpenTool((tool) => (tool === 'calculator' ? null : 'calculator'));
 
@@ -114,8 +179,58 @@ export default function QuickTools() {
         label="Open Google"
         onClick={() => window.open(GOOGLE_URL, '_blank', 'noopener,noreferrer')}
       />
+      <QuickToolButton active={openTool === 'translator'} icon="languages" label="Translator" onClick={setTranslatorOpen} />
       <QuickToolButton active={openTool === 'money'} label="USD to VND" textIcon="$" onClick={setMoneyOpen} />
       <QuickToolButton active={openTool === 'calculator'} icon="calculator" label="Quick calculator" onClick={setCalculatorOpen} />
+
+      {openTool === 'translator' && (
+        <div className="absolute right-0 top-full z-[70] mt-1 w-[min(360px,calc(100vw-1rem))] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-xl shadow-black/10">
+          <div className="mb-2 flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
+              <Icon name="languages" size={15} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-[var(--color-text-primary)]">Translator by Groq AI</p>
+              <p className="truncate text-[10px] text-[var(--color-text-tertiary)]">Vietnamese to/from English</p>
+            </div>
+            <button
+              type="button"
+              onClick={clearTranslator}
+              className="h-7 rounded-lg bg-[var(--color-text-primary)] px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-45"
+              disabled={!translatorText && !translation && !translatorStatus}
+            >
+              Clear
+            </button>
+          </div>
+
+          <textarea
+            ref={translatorInputRef}
+            value={translatorText}
+            aria-label="Translator input"
+            onChange={(event) => setTranslatorText(event.currentTarget.value.slice(0, 3000))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void translateText();
+              }
+              if (event.key === 'Escape') setOpenTool(null);
+            }}
+            className="min-h-24 w-full resize-none rounded-lg border border-black/35 bg-[var(--color-surface-subtle)] px-3 py-2 text-sm leading-5 text-[var(--color-text-primary)] outline-none transition-colors placeholder:text-[var(--color-text-tertiary)] focus:border-black focus:bg-white"
+            placeholder="Type Vietnamese or English, then press Enter..."
+          />
+
+          <div className="mt-2 min-h-24 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-2">
+            <p className={`whitespace-pre-wrap text-sm leading-5 ${translation ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}>
+              {translation || (isTranslating ? 'Translating...' : 'Translation will appear here.')}
+            </p>
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-2 text-[9px] text-[var(--color-text-tertiary)]">
+            <span>{translatorStatus || (translatorModel ? `Model: ${translatorModel}` : 'Enter to translate, Shift+Enter for new line')}</span>
+            <span>{translatorText.length.toLocaleString()} / 3,000</span>
+          </div>
+        </div>
+      )}
 
       {openTool === 'money' && (
         <div className="absolute right-0 top-full z-[70] mt-1 w-[min(300px,calc(100vw-1rem))] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-xl shadow-black/10">

@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import groqChatHandler from './api/ai/groq/chat.js';
+import groqTranslateHandler from './api/ai/groq/translate.js';
 import geminiChatHandler from './api/ai/gemini/chat.js';
 import musicSearchHandler from './api/music/search.js';
 
@@ -17,6 +18,10 @@ export default defineConfig({
           const pathname = req.url?.split('?')[0];
           if (pathname === '/api/ai/groq/chat') {
             await groqChatHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/ai/groq/translate') {
+            await groqTranslateHandler(req, res);
             return;
           }
           if (pathname === '/api/ai/gemini/chat') {
