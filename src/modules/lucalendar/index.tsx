@@ -42,6 +42,7 @@ export default function LuCalendarModule() {
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [detailsPanelOpen, setDetailsPanelOpen] = useState(true);
 
   const visibleDays = useMemo(() => getVisibleMonthDays(currentMonth), [currentMonth]);
   const eventsByDay = useMemo(() => mapEventsByDay(events), [events]);
@@ -198,6 +199,11 @@ export default function LuCalendarModule() {
     setStatus('Event created.');
   };
 
+  const openNewEventForm = () => {
+    setDetailsPanelOpen(true);
+    setShowAddForm(true);
+  };
+
   if (!dashboardUser) {
     return (
       <div className="flex h-full items-center justify-center bg-white p-6 text-center">
@@ -216,15 +222,18 @@ export default function LuCalendarModule() {
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-white text-[var(--color-text-primary)]">
-      <header className="flex flex-shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-border-subtle)] px-4 py-3">
-        <div className="flex min-w-[180px] flex-1 items-center gap-2">
+      <header className="flex flex-shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-border-subtle)] px-3 py-2">
+        <div className="flex min-w-[240px] flex-1 items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
             <Icon name="calendar" size={17} />
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">LuCalendar</h2>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <h2 className="truncate text-sm font-semibold">LuCalendar</h2>
+              <span className="text-xs font-semibold text-[var(--color-text-primary)]">{formatMonthLabel(currentMonth)}</span>
+            </div>
             <p className="truncate text-[11px] text-[var(--color-text-tertiary)]">
-              {accounts.length ? `${accounts.length} Google Calendar accounts` : 'Month view'}
+              {loadingEvents ? 'Loading events...' : `${events.length} events`} · {accounts.length ? `${accounts.length} Google Calendar accounts` : 'Month view'}
             </p>
           </div>
         </div>
@@ -278,6 +287,29 @@ export default function LuCalendarModule() {
           <Icon name="plus" size={13} />
           {connecting ? 'Connecting' : 'Connect account'}
         </button>
+
+        <button
+          type="button"
+          onClick={openNewEventForm}
+          disabled={accounts.length === 0}
+          className="flex h-8 items-center gap-1.5 rounded-lg bg-white px-3 text-xs font-semibold text-[var(--color-text-secondary)] shadow-sm transition-colors hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Icon name="plus" size={13} />
+          New event
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDetailsPanelOpen((open) => !open)}
+          className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
+            detailsPanelOpen
+              ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
+              : 'bg-white text-[var(--color-text-secondary)] shadow-sm hover:text-[var(--color-accent)]'
+          }`}
+        >
+          <Icon name={detailsPanelOpen ? 'panel-right-close' : 'panel-right-open'} size={13} />
+          Details
+        </button>
       </header>
 
       {(status || error) && (
@@ -325,26 +357,8 @@ export default function LuCalendarModule() {
           </div>
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 bg-[var(--color-surface-muted)] xl:grid-cols-[minmax(0,1fr)_340px]">
-          <section className="flex min-w-0 flex-col p-3">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-semibold">{formatMonthLabel(currentMonth)}</h3>
-                <p className="text-xs text-[var(--color-text-tertiary)]">
-                  {loadingEvents ? 'Loading events...' : `${events.length} events in visible range`}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAddForm((value) => !value)}
-                disabled={accounts.length === 0}
-                className="flex h-8 items-center gap-1.5 rounded-lg bg-white px-3 text-xs font-semibold text-[var(--color-text-secondary)] shadow-sm transition-colors hover:text-[var(--color-accent)] disabled:opacity-40"
-              >
-                <Icon name="plus" size={13} />
-                New event
-              </button>
-            </div>
-
+        <div className="flex min-h-0 flex-1 bg-[var(--color-surface-muted)]">
+          <section className="flex min-w-0 flex-1 flex-col p-3">
             <div className="grid flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
               <div className="grid grid-cols-7 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)]">
                 {WEEK_DAYS.map((day) => (
@@ -363,6 +377,7 @@ export default function LuCalendarModule() {
                       type="button"
                       onClick={() => {
                         setSelectedDateKey(day.key);
+                        setDetailsPanelOpen(true);
                       }}
                       className={`min-h-0 border-b border-r border-[var(--color-border-subtle)] p-1.5 text-left transition-colors hover:bg-[var(--color-surface-subtle)] ${
                         selected ? 'bg-[var(--color-accent-subtle)] ring-1 ring-inset ring-[var(--color-accent)]/35' : 'bg-white'
@@ -397,18 +412,25 @@ export default function LuCalendarModule() {
             </div>
           </section>
 
-          <aside className="min-h-0 overflow-y-auto border-l border-[var(--color-border-subtle)] bg-white p-3">
-            <DayDetailsPanel
-              date={selectedDate}
-              events={selectedEvents}
-              accounts={accounts}
-              calendarsByAccount={calendarsByAccount}
-              showAddForm={showAddForm}
-              onToggleAdd={() => setShowAddForm((value) => !value)}
-              onDeleteEvent={deleteEvent}
-              onCreated={addCreatedEvent}
-              accountFilter={accountFilter}
-            />
+          <aside
+            aria-hidden={!detailsPanelOpen}
+            className="min-h-0 flex-shrink-0 overflow-hidden border-l border-[var(--color-border-subtle)] bg-white transition-[width] duration-300 ease-out"
+            style={{ width: detailsPanelOpen ? '340px' : 0 }}
+          >
+            <div className="h-full w-[340px] overflow-y-auto p-3">
+              <DayDetailsPanel
+                date={selectedDate}
+                events={selectedEvents}
+                accounts={accounts}
+                calendarsByAccount={calendarsByAccount}
+                showAddForm={showAddForm}
+                onToggleAdd={() => setShowAddForm((value) => !value)}
+                onClose={() => setDetailsPanelOpen(false)}
+                onDeleteEvent={deleteEvent}
+                onCreated={addCreatedEvent}
+                accountFilter={accountFilter}
+              />
+            </div>
           </aside>
         </div>
       )}
@@ -424,6 +446,7 @@ interface DayDetailsPanelProps {
   showAddForm: boolean;
   accountFilter: string;
   onToggleAdd: () => void;
+  onClose: () => void;
   onDeleteEvent: (event: LuCalendarEvent) => void;
   onCreated: (event: LuCalendarEvent) => void;
 }
@@ -436,6 +459,7 @@ function DayDetailsPanel({
   showAddForm,
   accountFilter,
   onToggleAdd,
+  onClose,
   onDeleteEvent,
   onCreated,
 }: DayDetailsPanelProps) {
@@ -451,6 +475,14 @@ function DayDetailsPanel({
         </div>
         <button type="button" onClick={onToggleAdd} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-accent)]">
           <Icon name={showAddForm ? 'x' : 'plus'} size={15} />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+          title="Close details"
+        >
+          <Icon name="panel-right-close" size={15} />
         </button>
       </div>
 

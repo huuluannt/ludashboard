@@ -1,7 +1,11 @@
-import { Music2, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import { Music2, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import { selectCurrentTrack, useMusicStore } from '@/state/musicStore';
 
-export default function MiniMusicPlayer() {
+interface MiniMusicPlayerProps {
+  onClose?: () => void;
+}
+
+export default function MiniMusicPlayer({ onClose }: MiniMusicPlayerProps) {
   const currentTrack = useMusicStore(selectCurrentTrack);
   const isPlaying = useMusicStore((state) => state.isPlaying);
   const currentTime = useMusicStore((state) => state.currentTime);
@@ -39,16 +43,38 @@ export default function MiniMusicPlayer() {
               <p className="truncate text-[10px] text-[var(--color-text-tertiary)]">{currentTrack.channelTitle}</p>
               {playerMessage && <p className="truncate text-[9px] text-[var(--color-danger)]">{playerMessage}</p>}
             </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+                title="Close LuMusic"
+                aria-label="Close LuMusic"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
               <Music2 size={16} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[11px] font-semibold">LuMusic ready</p>
               <p className="truncate text-[10px] text-[var(--color-text-tertiary)]">Search and play music</p>
             </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+                title="Close LuMusic"
+                aria-label="Close LuMusic"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         )}
 

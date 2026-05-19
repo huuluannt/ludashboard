@@ -1,53 +1,49 @@
 import { create } from 'zustand';
 import { offlineStorage } from '@/storage/offlineStorage';
 
-interface RightSidebarState {
+interface RightCornerSidebarState {
   enabled: boolean;
   visible: boolean;
   moduleId: string;
 }
 
-interface RightSidebarStore extends RightSidebarState {
+interface RightCornerSidebarStore extends RightCornerSidebarState {
   _hydrated: boolean;
   hydrate: () => Promise<void>;
   setVisible: (visible: boolean) => void;
   toggleVisible: () => void;
   closeFully: () => void;
   setModuleId: (moduleId: string) => void;
-  syncFromCloud: (state: LegacyRightSidebarState) => void;
+  syncFromCloud: (state: Partial<RightCornerSidebarState>) => void;
 }
 
-type LegacyRightSidebarState = Partial<RightSidebarState> & { open?: boolean; variant?: string };
-
-const DEFAULT_STATE: RightSidebarState = {
+const DEFAULT_STATE: RightCornerSidebarState = {
   enabled: true,
   visible: false,
-  moduleId: 'luchat',
+  moduleId: 'lufast',
 };
 
-function normalizeRightSidebarState(value: unknown): RightSidebarState {
+function normalizeRightCornerSidebarState(value: unknown): RightCornerSidebarState {
   if (!value || typeof value !== 'object') return DEFAULT_STATE;
-  const data = value as LegacyRightSidebarState;
-  if (data.variant === 'corner') return DEFAULT_STATE;
-  const legacyOpen = typeof data.open === 'boolean' ? data.open : undefined;
+  const data = value as Partial<RightCornerSidebarState>;
 
   return {
     enabled: typeof data.enabled === 'boolean' ? data.enabled : DEFAULT_STATE.enabled,
-    visible: typeof data.visible === 'boolean' ? data.visible : legacyOpen ?? DEFAULT_STATE.visible,
+    visible: typeof data.visible === 'boolean' ? data.visible : DEFAULT_STATE.visible,
     moduleId: typeof data.moduleId === 'string' && data.moduleId ? data.moduleId : DEFAULT_STATE.moduleId,
   };
 }
 
-function persist(state: RightSidebarState) {
-  offlineStorage.setRightSidebar(state);
+function persist(state: RightCornerSidebarState) {
+  offlineStorage.setRightCornerSidebar(state);
 }
 
-export const useRightSidebarStore = create<RightSidebarStore>((set, get) => ({
+export const useRightCornerSidebarStore = create<RightCornerSidebarStore>((set, get) => ({
   ...DEFAULT_STATE,
   _hydrated: false,
 
   async hydrate() {
-    const stored = normalizeRightSidebarState(await offlineStorage.getRightSidebar());
+    const stored = normalizeRightCornerSidebarState(await offlineStorage.getRightCornerSidebar());
     set({ ...stored, _hydrated: true });
   },
 
@@ -78,12 +74,10 @@ export const useRightSidebarStore = create<RightSidebarStore>((set, get) => ({
   },
 
   syncFromCloud(state) {
-    const legacyOpen = typeof state.open === 'boolean' ? state.open : undefined;
-    const next = normalizeRightSidebarState({
-      enabled: state.enabled ?? (legacyOpen !== undefined ? DEFAULT_STATE.enabled : get().enabled),
-      visible: state.visible ?? legacyOpen ?? get().visible,
+    const next = normalizeRightCornerSidebarState({
+      enabled: state.enabled ?? get().enabled,
+      visible: state.visible ?? get().visible,
       moduleId: state.moduleId ?? get().moduleId,
-      variant: state.variant,
     });
     set(next);
     persist(next);

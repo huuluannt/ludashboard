@@ -1,4 +1,4 @@
-import { Pause, Play, PlayCircle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import { Pause, Play, PlayCircle, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { VideoItem } from '@/modules/luvideo/types';
 
@@ -16,7 +16,11 @@ const EMPTY_STATE: LuVideoMiniState = {
   volume: 70,
 };
 
-export default function LuVideoMiniPlayer() {
+interface LuVideoMiniPlayerProps {
+  onClose?: () => void;
+}
+
+export default function LuVideoMiniPlayer({ onClose }: LuVideoMiniPlayerProps) {
   const [state, setState] = useState<LuVideoMiniState>(EMPTY_STATE);
 
   useEffect(() => {
@@ -62,16 +66,38 @@ export default function LuVideoMiniPlayer() {
               <p className="truncate text-[11px] font-semibold">{video.title}</p>
               <p className="truncate text-[10px] text-white/45">{video.channel}</p>
             </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+                title="Close LuVideo"
+                aria-label="Close LuVideo"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#e8ff47]/10 text-[#e8ff47]">
               <PlayCircle size={16} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[11px] font-semibold">LuVideo ready</p>
               <p className="truncate text-[10px] text-white/45">Open a video to control it here</p>
             </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+                title="Close LuVideo"
+                aria-label="Close LuVideo"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         )}
 
