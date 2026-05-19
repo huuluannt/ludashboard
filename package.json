@@ -19,6 +19,7 @@
   "dependencies": {
     "@react-oauth/google": "^0.13.5",
     "@tailwindcss/vite": "^4.3.0",
+    "@upstash/redis": "^1.38.0",
     "firebase": "^12.13.0",
     "idb-keyval": "^6.2.2",
     "jwt-decode": "^4.0.0",
