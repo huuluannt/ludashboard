@@ -64,3 +64,5 @@ LUCALENDAR_TOKEN_SECRET=
 ```
 
 LuCalendar stores Google OAuth state and encrypted account tokens as server-side Redis values. The refresh tokens are never sent to the frontend. If `LUCALENDAR_TOKEN_SECRET` is omitted, LuCalendar derives encryption from the Upstash token, but a separate stable secret is preferred.
+
+If the OAuth popup opens LuDashboard inside `/api/calendar/callback`, the browser is likely still controlled by an old service worker. Redeploy the latest build, then hard refresh once or clear site data so the updated service worker can stop intercepting `/api/*` callback navigations.

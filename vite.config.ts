@@ -108,6 +108,10 @@ export default defineConfig(({ mode }) => {
         ],
       },
       workbox: {
+        // Never let the SPA navigation fallback handle API/OAuth callback URLs.
+        // OAuth popup navigations must reach Vercel Functions directly.
+        navigateFallbackDenylist: [/^\/api(?:\/|$)/],
+
         // Cache all static assets (JS, CSS, HTML, fonts, images)
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
 
