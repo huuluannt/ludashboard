@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import Icon from '@/components/Icon';
 import { getSearchScore } from '@/lib/moduleSearch';
 import { moduleRegistry } from '@/modules/moduleRegistry';
@@ -14,6 +14,7 @@ export default function GlobalModuleSearch() {
   const searchQuery = useSidebarStore((s) => s.searchQuery);
   const setSearchQuery = useSidebarStore((s) => s.setSearchQuery);
   const pinnedModuleIds = useSidebarStore((s) => s.pinnedModuleIds);
+  const togglePin = useSidebarStore((s) => s.togglePin);
   const moduleOrderIds = useSidebarStore((s) => s.moduleOrderIds);
   const openTab = useTabStore((s) => s.openTab);
   const importedModules = useModuleStore((s) => s.importedModules);
@@ -131,6 +132,13 @@ export default function GlobalModuleSearch() {
     setSearchQuery('');
   };
 
+  const handleTogglePin = (event: ReactMouseEvent<HTMLButtonElement>, moduleId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    togglePin(moduleId);
+    searchInputRef.current?.focus({ preventScroll: true });
+  };
+
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -245,9 +253,8 @@ export default function GlobalModuleSearch() {
             searchResults.map((mod, index) => {
               const selected = index === selectedSearchIndex;
               return (
-                <button
+                <div
                   key={mod.manifest.id}
-                  type="button"
                   role="option"
                   aria-selected={selected}
                   onMouseEnter={() => setSelectedSearchIndex(index)}
@@ -276,10 +283,25 @@ export default function GlobalModuleSearch() {
                       {mod.manifest.description}
                     </span>
                   </span>
-                  {pinnedModuleIds.includes(mod.manifest.id) && (
-                    <Icon name="pin" size={12} className={selected ? 'text-white/55' : 'text-[var(--color-text-tertiary)]'} />
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    aria-pressed={pinnedModuleIds.includes(mod.manifest.id)}
+                    onMouseDown={(event) => handleTogglePin(event, mod.manifest.id)}
+                    className={`flex h-7 flex-shrink-0 items-center gap-1 rounded-md border px-2 text-[10px] font-semibold transition-colors ${
+                      pinnedModuleIds.includes(mod.manifest.id)
+                        ? selected
+                          ? 'border-white/20 bg-white/15 text-white'
+                          : 'border-[var(--color-accent)]/20 bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
+                        : selected
+                          ? 'border-white/10 text-white/55 hover:bg-white/10 hover:text-white'
+                          : 'border-transparent text-[var(--color-text-tertiary)] hover:bg-white hover:text-[var(--color-text-secondary)] hover:border-[var(--color-border)]'
+                    }`}
+                    title={pinnedModuleIds.includes(mod.manifest.id) ? 'Unpin module' : 'Pin module'}
+                  >
+                    <Icon name="pin" size={12} />
+                    <span>{pinnedModuleIds.includes(mod.manifest.id) ? 'Unpin' : 'Pin'}</span>
+                  </button>
+                </div>
               );
             })
           )}
