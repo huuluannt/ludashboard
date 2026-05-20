@@ -1,7 +1,7 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { getCalendarAccount } from '../_lib/calendarTokenStore.js';
-import { CalendarAuthError, googleCalendarFetch } from '../_lib/googleCalendar.js';
-import { allowCors, getQuery, requireMethod, sendJson } from '../_lib/http.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { getCalendarAccount } from '../../_lib/calendarTokenStore.js';
+import { CalendarAuthError, googleCalendarFetch } from '../../_lib/googleCalendar.js';
+import { allowCors, getQuery, requireMethod, sendJson } from '../../_lib/http.js';
 
 export default async function handler(req, res) {
   if (allowCors(req, res, ['GET', 'OPTIONS'])) return;

@@ -1,11 +1,11 @@
-import { consumeGoogleOAuthState, upsertGoogleAccount } from '../_lib/googleAppTokenStore.js';
+import { consumeGoogleOAuthState, upsertGoogleAccount } from '../../_lib/googleAppTokenStore.js';
 import {
   assertGoogleWorkspaceEnv,
   decodeJwtPayload,
   exchangeGoogleWorkspaceCodeForTokens,
   sendGoogleCallbackHtml,
-} from '../_lib/googleWorkspace.js';
-import { getQuery } from '../_lib/http.js';
+} from '../../_lib/googleWorkspace.js';
+import { getQuery } from '../../_lib/http.js';
 
 const APP_ID = 'gmail';
 

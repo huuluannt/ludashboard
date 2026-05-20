@@ -1,12 +1,12 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { getCalendarAccount, listCalendarAccounts } from '../_lib/calendarTokenStore.js';
-import { CalendarAuthError, googleCalendarFetch } from '../_lib/googleCalendar.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { getCalendarAccount, listCalendarAccounts } from '../../_lib/calendarTokenStore.js';
+import { CalendarAuthError, googleCalendarFetch } from '../../_lib/googleCalendar.js';
 import { listCalendarsForAccount } from './calendars.js';
-import { allowCors, getQuery, readJsonBody, requireMethod, sendJson } from '../_lib/http.js';
+import { allowCors, getQuery, readJsonBody, requireMethod, sendJson } from '../../_lib/http.js';
 
 export default async function handler(req, res) {
-  if (allowCors(req, res, ['GET', 'POST', 'DELETE', 'OPTIONS'])) return;
-  if (!requireMethod(req, res, ['GET', 'POST', 'DELETE'])) return;
+  if (allowCors(req, res, ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'])) return;
+  if (!requireMethod(req, res, ['GET', 'POST', 'PATCH', 'DELETE'])) return;
 
   const user = await requireDashboardUser(req, res);
   if (!user) return;
@@ -19,6 +19,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       await handleCreateEvent(req, res, user.id);
+      return;
+    }
+
+    if (req.method === 'PATCH') {
+      await handleUpdateEvent(req, res, user.id);
       return;
     }
 
@@ -86,8 +91,9 @@ async function handleCreateEvent(req, res, ownerId) {
   const endTime = String(body.endTime || '');
   const description = String(body.description || '').trim();
   const timeZone = String(body.timeZone || 'UTC');
+  const allDay = Boolean(body.allDay);
 
-  if (!accountId || !calendarId || !title || !date || !startTime || !endTime) {
+  if (!accountId || !calendarId || !title || !date || (!allDay && (!startTime || !endTime))) {
     sendJson(res, 400, { error: 'title, date, start time, end time, account, and calendar are required.' });
     return;
   }
@@ -98,26 +104,51 @@ async function handleCreateEvent(req, res, ownerId) {
     return;
   }
 
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
-  const data = await googleCalendarFetch(ownerId, account, url, {
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
+  url.searchParams.set('sendUpdates', 'none');
+  const data = await googleCalendarFetch(ownerId, account, url.toString(), {
     method: 'POST',
-    body: JSON.stringify({
-      summary: title,
-      description,
-      visibility: 'private',
-      start: {
-        dateTime: `${date}T${normalizeTime(startTime)}:00`,
-        timeZone,
-      },
-      end: {
-        dateTime: `${date}T${normalizeTime(endTime)}:00`,
-        timeZone,
-      },
-    }),
+    body: JSON.stringify(buildGoogleEventPayload({ title, description, date, startTime, endTime, allDay, timeZone })),
   });
 
   sendJson(res, 200, {
     event: normalizeGoogleEvent(data, account, { id: calendarId, summary: calendarId }),
+  });
+}
+
+async function handleUpdateEvent(req, res, ownerId) {
+  const body = await readJsonBody(req);
+  const accountId = String(body.accountId || '');
+  const calendarId = String(body.calendarId || '');
+  const eventId = String(body.eventId || '');
+  const title = String(body.title || '').trim();
+  const date = String(body.date || '');
+  const startTime = String(body.startTime || '');
+  const endTime = String(body.endTime || '');
+  const description = String(body.description || '').trim();
+  const timeZone = String(body.timeZone || 'UTC');
+  const allDay = Boolean(body.allDay);
+
+  if (!accountId || !calendarId || !eventId || !title || !date || (!allDay && (!startTime || !endTime))) {
+    sendJson(res, 400, { error: 'event, title, date, account, and calendar are required.' });
+    return;
+  }
+
+  const account = await getCalendarAccount(ownerId, accountId);
+  if (!account) {
+    sendJson(res, 404, { error: 'Calendar account was not found.' });
+    return;
+  }
+
+  const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
+  url.searchParams.set('sendUpdates', 'none');
+  const data = await googleCalendarFetch(ownerId, account, url.toString(), {
+    method: 'PATCH',
+    body: JSON.stringify(buildGoogleEventPayload({ title, description, date, startTime, endTime, allDay, timeZone })),
+  });
+
+  sendJson(res, 200, {
+    event: normalizeGoogleEvent(data, account, { id: calendarId, summary: body.calendarSummary || calendarId, backgroundColor: body.color }),
   });
 }
 
@@ -183,4 +214,37 @@ function normalizeTime(value) {
   const hour = Math.min(23, Math.max(0, Number(match[1])));
   const minute = Math.min(59, Math.max(0, Number(match[2])));
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function buildGoogleEventPayload({ title, description, date, startTime, endTime, allDay, timeZone }) {
+  if (allDay) {
+    return {
+      summary: title,
+      description,
+      visibility: 'private',
+      start: { date },
+      end: { date: addOneDayKey(date) },
+    };
+  }
+
+  return {
+    summary: title,
+    description,
+    visibility: 'private',
+    start: {
+      dateTime: `${date}T${normalizeTime(startTime)}:00`,
+      timeZone,
+    },
+    end: {
+      dateTime: `${date}T${normalizeTime(endTime)}:00`,
+      timeZone,
+    },
+  };
+}
+
+function addOneDayKey(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return dateKey;
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
 }

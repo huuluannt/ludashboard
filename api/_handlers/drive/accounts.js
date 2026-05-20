@@ -1,6 +1,6 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { listGoogleAccounts, removeGoogleAccount } from '../_lib/googleAppTokenStore.js';
-import { allowCors, getQuery, readJsonBody, requireMethod, sendJson } from '../_lib/http.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { listGoogleAccounts, removeGoogleAccount } from '../../_lib/googleAppTokenStore.js';
+import { allowCors, getQuery, readJsonBody, requireMethod, sendJson } from '../../_lib/http.js';
 
 const APP_ID = 'drive';
 

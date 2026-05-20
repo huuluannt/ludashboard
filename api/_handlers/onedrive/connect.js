@@ -1,7 +1,7 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { createMicrosoftOAuthState } from '../_lib/microsoftTokenStore.js';
-import { assertMicrosoftEnv, buildMicrosoftAuthUrl, MICROSOFT_ONEDRIVE_SCOPES } from '../_lib/microsoftGraph.js';
-import { allowCors, requireMethod, sendJson } from '../_lib/http.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { createMicrosoftOAuthState } from '../../_lib/microsoftTokenStore.js';
+import { assertMicrosoftEnv, buildMicrosoftAuthUrl, MICROSOFT_ONEDRIVE_SCOPES } from '../../_lib/microsoftGraph.js';
+import { allowCors, requireMethod, sendJson } from '../../_lib/http.js';
 
 export default async function handler(req, res) {
   if (allowCors(req, res, ['POST', 'OPTIONS'])) return;

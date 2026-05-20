@@ -1,7 +1,7 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { createOAuthState } from '../_lib/calendarTokenStore.js';
-import { assertCalendarEnv, buildGoogleCalendarAuthUrl, GOOGLE_OAUTH_SCOPES } from '../_lib/googleCalendar.js';
-import { allowCors, requireMethod, sendJson } from '../_lib/http.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { createOAuthState } from '../../_lib/calendarTokenStore.js';
+import { assertCalendarEnv, buildGoogleCalendarAuthUrl, GOOGLE_OAUTH_SCOPES } from '../../_lib/googleCalendar.js';
+import { allowCors, requireMethod, sendJson } from '../../_lib/http.js';
 
 export default async function handler(req, res) {
   if (allowCors(req, res, ['POST', 'OPTIONS'])) return;

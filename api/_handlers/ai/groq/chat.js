@@ -8,7 +8,7 @@ import {
   requirePost,
   sanitizeMessages,
   sendJson,
-} from '../../_lib/aiGuard.js';
+} from '../../../_lib/aiGuard.js';
 
 const SYSTEM_PROMPT =
   'You are LuChat, a fast assistant inside LuDashboard. Answer concisely, clearly, and practically. Help the user with productivity, coding, writing, and dashboard tasks.';

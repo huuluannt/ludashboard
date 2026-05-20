@@ -7,7 +7,7 @@ import {
   readJsonBody,
   requirePost,
   sendJson,
-} from '../../_lib/aiGuard.js';
+} from '../../../_lib/aiGuard.js';
 
 const SYSTEM_PROMPT = [
   'You are LuDashboard Translation Engine, not a conversational assistant.',

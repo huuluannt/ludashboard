@@ -1,12 +1,12 @@
-import { consumeMicrosoftOAuthState, upsertMicrosoftAccount } from '../_lib/microsoftTokenStore.js';
+import { consumeMicrosoftOAuthState, upsertMicrosoftAccount } from '../../_lib/microsoftTokenStore.js';
 import {
   assertMicrosoftEnv,
   decodeJwtPayload,
   exchangeMicrosoftCodeForTokens,
   fetchMicrosoftProfile,
   sendMicrosoftCallbackHtml,
-} from '../_lib/microsoftGraph.js';
-import { getQuery } from '../_lib/http.js';
+} from '../../_lib/microsoftGraph.js';
+import { getQuery } from '../../_lib/http.js';
 
 export default async function handler(req, res) {
   const query = getQuery(req);

@@ -1,6 +1,6 @@
-import { consumeOAuthState, upsertCalendarAccount } from '../_lib/calendarTokenStore.js';
-import { assertCalendarEnv, decodeJwtPayload, exchangeCodeForTokens } from '../_lib/googleCalendar.js';
-import { getQuery } from '../_lib/http.js';
+import { consumeOAuthState, upsertCalendarAccount } from '../../_lib/calendarTokenStore.js';
+import { assertCalendarEnv, decodeJwtPayload, exchangeCodeForTokens } from '../../_lib/googleCalendar.js';
+import { getQuery } from '../../_lib/http.js';
 
 export default async function handler(req, res) {
   const query = getQuery(req);

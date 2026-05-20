@@ -2,29 +2,13 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import groqChatHandler from './api/ai/groq/chat.js';
-import groqTranslateHandler from './api/ai/groq/translate.js';
-import geminiChatHandler from './api/ai/gemini/chat.js';
-import musicSearchHandler from './api/music/search.js';
-import calendarConnectHandler from './api/calendar/connect.js';
-import calendarCallbackHandler from './api/calendar/callback.js';
-import calendarAccountsHandler from './api/calendar/accounts.js';
-import calendarCalendarsHandler from './api/calendar/calendars.js';
-import calendarEventsHandler from './api/calendar/events.js';
-import gmailConnectHandler from './api/gmail/connect.js';
-import gmailCallbackHandler from './api/gmail/callback.js';
-import gmailAccountsHandler from './api/gmail/accounts.js';
-import gmailLabelsHandler from './api/gmail/labels.js';
-import gmailMessagesHandler from './api/gmail/messages.js';
-import driveConnectHandler from './api/drive/connect.js';
-import driveCallbackHandler from './api/drive/callback.js';
-import driveAccountsHandler from './api/drive/accounts.js';
-import driveFilesHandler from './api/drive/files.js';
-import oneDriveConnectHandler from './api/onedrive/connect.js';
-import oneDriveCallbackHandler from './api/onedrive/callback.js';
-import oneDriveAccountsHandler from './api/onedrive/accounts.js';
-import oneDriveFilesHandler from './api/onedrive/files.js';
-import oneDriveContentHandler from './api/onedrive/content.js';
+import geminiApiHandler from './api/ai/gemini/[...path].js';
+import groqApiHandler from './api/ai/groq/[...path].js';
+import calendarApiHandler from './api/calendar/[...path].js';
+import driveApiHandler from './api/drive/[...path].js';
+import gmailApiHandler from './api/gmail/[...path].js';
+import musicApiHandler from './api/music/[...path].js';
+import oneDriveApiHandler from './api/onedrive/[...path].js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -41,96 +25,32 @@ export default defineConfig(({ mode }) => {
       configureServer(server) {
         server.middlewares.use(async (req, res, next) => {
           const pathname = req.url?.split('?')[0];
-          if (pathname === '/api/ai/groq/chat') {
-            await groqChatHandler(req, res);
+          if (pathname?.startsWith('/api/ai/groq/')) {
+            await groqApiHandler(req, res);
             return;
           }
-          if (pathname === '/api/ai/groq/translate') {
-            await groqTranslateHandler(req, res);
+          if (pathname?.startsWith('/api/ai/gemini/')) {
+            await geminiApiHandler(req, res);
             return;
           }
-          if (pathname === '/api/ai/gemini/chat') {
-            await geminiChatHandler(req, res);
+          if (pathname?.startsWith('/api/calendar/')) {
+            await calendarApiHandler(req, res);
             return;
           }
-          if (pathname === '/api/music/search') {
-            await musicSearchHandler(req, res);
+          if (pathname?.startsWith('/api/drive/')) {
+            await driveApiHandler(req, res);
             return;
           }
-          if (pathname === '/api/calendar/connect') {
-            await calendarConnectHandler(req, res);
+          if (pathname?.startsWith('/api/gmail/')) {
+            await gmailApiHandler(req, res);
             return;
           }
-          if (pathname === '/api/calendar/callback') {
-            await calendarCallbackHandler(req, res);
+          if (pathname?.startsWith('/api/music/')) {
+            await musicApiHandler(req, res);
             return;
           }
-          if (pathname === '/api/calendar/accounts') {
-            await calendarAccountsHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/calendar/calendars') {
-            await calendarCalendarsHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/calendar/events') {
-            await calendarEventsHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/gmail/connect') {
-            await gmailConnectHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/gmail/callback') {
-            await gmailCallbackHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/gmail/accounts') {
-            await gmailAccountsHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/gmail/labels') {
-            await gmailLabelsHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/gmail/messages') {
-            await gmailMessagesHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/drive/connect') {
-            await driveConnectHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/drive/callback') {
-            await driveCallbackHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/drive/accounts') {
-            await driveAccountsHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/drive/files') {
-            await driveFilesHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/onedrive/connect') {
-            await oneDriveConnectHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/onedrive/callback') {
-            await oneDriveCallbackHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/onedrive/accounts') {
-            await oneDriveAccountsHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/onedrive/files') {
-            await oneDriveFilesHandler(req, res);
-            return;
-          }
-          if (pathname === '/api/onedrive/content') {
-            await oneDriveContentHandler(req, res);
+          if (pathname?.startsWith('/api/onedrive/')) {
+            await oneDriveApiHandler(req, res);
             return;
           }
           next();

@@ -3,7 +3,7 @@ import {
   readJsonBody,
   requirePost,
   sendJson,
-} from '../_lib/aiGuard.js';
+} from '../../_lib/aiGuard.js';
 
 const SEARCH_CACHE_TTL = 5 * 60 * 1000;
 const DEFAULT_MAX_RESULTS = 16;

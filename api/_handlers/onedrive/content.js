@@ -1,7 +1,7 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { getMicrosoftAccount } from '../_lib/microsoftTokenStore.js';
-import { MicrosoftGraphAuthError, microsoftGraphContentFetch, oneDriveApiUrl } from '../_lib/microsoftGraph.js';
-import { allowCors, getQuery, requireMethod, sendJson } from '../_lib/http.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { getMicrosoftAccount } from '../../_lib/microsoftTokenStore.js';
+import { MicrosoftGraphAuthError, microsoftGraphContentFetch, oneDriveApiUrl } from '../../_lib/microsoftGraph.js';
+import { allowCors, getQuery, requireMethod, sendJson } from '../../_lib/http.js';
 
 export default async function handler(req, res) {
   if (allowCors(req, res, ['GET', 'OPTIONS'])) return;

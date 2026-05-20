@@ -8,7 +8,7 @@ import {
   requirePost,
   sanitizeMessages,
   sendJson,
-} from '../../_lib/aiGuard.js';
+} from '../../../_lib/aiGuard.js';
 
 const SYSTEM_PROMPT =
   'You are LuGemini, a research-oriented assistant inside LuDashboard. Provide accurate, structured, evidence-aware answers. If information is uncertain, say so clearly.';

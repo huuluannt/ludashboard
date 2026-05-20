@@ -1,6 +1,6 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { listCalendarAccounts, removeCalendarAccount } from '../_lib/calendarTokenStore.js';
-import { allowCors, getQuery, readJsonBody, requireMethod, sendJson } from '../_lib/http.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { listCalendarAccounts, removeCalendarAccount } from '../../_lib/calendarTokenStore.js';
+import { allowCors, getQuery, readJsonBody, requireMethod, sendJson } from '../../_lib/http.js';
 
 export default async function handler(req, res) {
   if (allowCors(req, res, ['GET', 'DELETE', 'OPTIONS'])) return;

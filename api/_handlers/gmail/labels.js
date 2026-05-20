@@ -1,7 +1,7 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { getGoogleAccount } from '../_lib/googleAppTokenStore.js';
-import { GoogleWorkspaceAuthError, googleWorkspaceFetch } from '../_lib/googleWorkspace.js';
-import { allowCors, getQuery, requireMethod, sendJson } from '../_lib/http.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { getGoogleAccount } from '../../_lib/googleAppTokenStore.js';
+import { GoogleWorkspaceAuthError, googleWorkspaceFetch } from '../../_lib/googleWorkspace.js';
+import { allowCors, getQuery, requireMethod, sendJson } from '../../_lib/http.js';
 
 const APP_ID = 'gmail';
 

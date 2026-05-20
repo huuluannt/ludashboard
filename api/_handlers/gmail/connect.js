@@ -1,11 +1,11 @@
-import { requireDashboardUser } from '../_lib/dashboardAuth.js';
-import { createGoogleOAuthState } from '../_lib/googleAppTokenStore.js';
+import { requireDashboardUser } from '../../_lib/dashboardAuth.js';
+import { createGoogleOAuthState } from '../../_lib/googleAppTokenStore.js';
 import {
   assertGoogleWorkspaceEnv,
   buildGoogleWorkspaceAuthUrl,
   GOOGLE_WORKSPACE_APPS,
-} from '../_lib/googleWorkspace.js';
-import { allowCors, requireMethod, sendJson } from '../_lib/http.js';
+} from '../../_lib/googleWorkspace.js';
+import { allowCors, requireMethod, sendJson } from '../../_lib/http.js';
 
 const APP_ID = 'gmail';
 
