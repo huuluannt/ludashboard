@@ -22,7 +22,13 @@ export default function RightSidebarDrawer() {
   );
 
   const selectedModule = useMemo(() => {
-    return moduleRegistry.get(moduleId) ?? moduleRegistry.get('luchat') ?? modules[0] ?? null;
+    return (
+      moduleRegistry.get(moduleId) ??
+      moduleRegistry.get('lufast') ??
+      moduleRegistry.get('luchat') ??
+      modules[0] ??
+      null
+    );
   }, [moduleId, modules, registryVersion]);
 
   useEffect(() => {

@@ -22,7 +22,7 @@ type LegacyRightSidebarState = Partial<RightSidebarState> & { open?: boolean; va
 const DEFAULT_STATE: RightSidebarState = {
   enabled: true,
   visible: false,
-  moduleId: 'luchat',
+  moduleId: 'lufast',
 };
 
 function normalizeRightSidebarState(value: unknown): RightSidebarState {

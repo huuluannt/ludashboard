@@ -8,6 +8,7 @@ import {
   NotesCloudValue,
   saveNotesSnapshot,
 } from '@/modules/notes/noteStorage';
+import { useFixedPopoverPosition } from './useFixedPopoverPosition';
 
 export default function QuickNoteButton() {
   const [open, setOpen] = useState(false);
@@ -15,6 +16,11 @@ export default function QuickNoteButton() {
   const [saving, setSaving] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const panelStyle = useFixedPopoverPosition({
+    anchorRef: containerRef,
+    open,
+    panelMaxWidth: 280,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -81,7 +87,10 @@ export default function QuickNoteButton() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-[70] mt-1 w-[min(280px,calc(100vw-1rem))] rounded-xl border border-[var(--color-border)] bg-white p-2 shadow-xl shadow-black/10">
+        <div
+          className="fixed z-[70] rounded-xl border border-[var(--color-border)] bg-white p-2 shadow-xl shadow-black/10"
+          style={panelStyle}
+        >
           <div className="mb-1.5 flex h-7 items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <Icon name="sticky-note" size={13} className="text-[var(--color-accent)]" />

@@ -166,7 +166,7 @@ export default function GlobalModuleSearch() {
   return (
     <div
       ref={searchAreaRef}
-      className={`relative min-w-[220px] max-w-[620px] flex-1 rounded-xl transition-shadow duration-200 ${
+      className={`relative min-w-0 max-w-[620px] flex-1 rounded-xl transition-shadow duration-200 ${
         searchHotkeyPulse ? 'ring-2 ring-[var(--color-accent)]/25 shadow-[0_0_0_4px_rgba(67,97,238,0.10)]' : ''
       }`}
     >

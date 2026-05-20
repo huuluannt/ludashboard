@@ -24,8 +24,8 @@ export default function RightCornerSidebar() {
   const selectedModule = useMemo(() => {
     return (
       moduleRegistry.get(moduleId) ??
-      moduleRegistry.get('lufast') ??
       moduleRegistry.get('luchat') ??
+      moduleRegistry.get('lufast') ??
       modules[0] ??
       null
     );

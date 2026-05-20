@@ -20,7 +20,7 @@ interface RightCornerSidebarStore extends RightCornerSidebarState {
 const DEFAULT_STATE: RightCornerSidebarState = {
   enabled: true,
   visible: false,
-  moduleId: 'lufast',
+  moduleId: 'luchat',
 };
 
 function normalizeRightCornerSidebarState(value: unknown): RightCornerSidebarState {

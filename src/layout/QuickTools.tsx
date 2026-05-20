@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Icon from '@/components/Icon';
+import { useFixedPopoverPosition } from './useFixedPopoverPosition';
 
 const GOOGLE_URL = 'https://www.google.com/';
 const USD_VND_RATE_URL = 'https://open.er-api.com/v6/latest/USD';
@@ -31,6 +32,11 @@ export default function QuickTools() {
   const translatorAbortRef = useRef<AbortController | null>(null);
   const moneyInputRef = useRef<HTMLInputElement>(null);
   const calculatorInputRef = useRef<HTMLInputElement>(null);
+  const panelStyle = useFixedPopoverPosition({
+    anchorRef: containerRef,
+    open: openTool !== null,
+    panelMaxWidth: openTool === 'translator' ? 360 : 300,
+  });
 
   useEffect(() => {
     if (!openTool) return;
@@ -184,7 +190,10 @@ export default function QuickTools() {
       <QuickToolButton active={openTool === 'calculator'} icon="calculator" label="Quick calculator" onClick={setCalculatorOpen} />
 
       {openTool === 'translator' && (
-        <div className="absolute right-0 top-full z-[70] mt-1 w-[min(360px,calc(100vw-1rem))] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-xl shadow-black/10">
+        <div
+          className="fixed z-[70] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-xl shadow-black/10"
+          style={panelStyle}
+        >
           <div className="mb-2 flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
               <Icon name="languages" size={15} />
@@ -233,7 +242,10 @@ export default function QuickTools() {
       )}
 
       {openTool === 'money' && (
-        <div className="absolute right-0 top-full z-[70] mt-1 w-[min(300px,calc(100vw-1rem))] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-xl shadow-black/10">
+        <div
+          className="fixed z-[70] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-xl shadow-black/10"
+          style={panelStyle}
+        >
           <div className="mb-2 flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
               $
@@ -276,7 +288,10 @@ export default function QuickTools() {
       )}
 
       {openTool === 'calculator' && (
-        <div className="absolute right-0 top-full z-[70] mt-1 w-[min(300px,calc(100vw-1rem))] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-xl shadow-black/10">
+        <div
+          className="fixed z-[70] rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-xl shadow-black/10"
+          style={panelStyle}
+        >
           <div className="mb-2 flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
               <Icon name="calculator" size={15} />
