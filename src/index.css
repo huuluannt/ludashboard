@@ -80,6 +80,27 @@ body {
   cursor: grabbing;
 }
 
+@media (max-width: 768px) {
+  .top-right-toolbar .global-module-search,
+  .top-right-toolbar .quick-actions-scroll {
+    flex: 0 1 calc((100% - 0.375rem) / 2);
+    max-width: calc((100% - 0.375rem) / 2);
+    min-width: 0;
+  }
+
+  .top-right-toolbar .quick-actions-scroll {
+    margin-right: 0;
+  }
+
+  .top-right-toolbar .global-search-input {
+    padding-right: 2.25rem;
+  }
+
+  .top-right-toolbar .global-search-hotkeys {
+    display: none;
+  }
+}
+
 /* ===== Tab drag ghost ===== */
 .tab-dragging {
   opacity: 0.5;

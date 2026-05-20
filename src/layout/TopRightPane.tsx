@@ -97,7 +97,7 @@ export default function TopRightPane() {
   };
 
   return (
-    <div className="h-10 min-h-[40px] flex items-center gap-1.5 bg-[var(--color-surface-subtle)] border-b border-[var(--color-border-subtle)] px-3 select-none relative">
+    <div className="top-right-toolbar h-10 min-h-[40px] flex items-center gap-1.5 bg-[var(--color-surface-subtle)] border-b border-[var(--color-border-subtle)] px-3 select-none relative">
       <GlobalModuleSearch />
 
       <div
@@ -163,22 +163,6 @@ export default function TopRightPane() {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={toggleRightCorner}
-            className={`
-              w-7 h-7 rounded-lg flex flex-shrink-0 items-center justify-center transition-colors cursor-pointer
-              ${
-                rightCornerVisible
-                  ? 'bg-white text-[var(--color-accent)] border border-[var(--color-border-subtle)] shadow-sm'
-                  : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-secondary)]'
-              }
-            `}
-            title={rightCornerVisible ? 'Hide right corner sidebar' : 'Show right corner sidebar'}
-          >
-            <Icon name="zap" size={15} />
-          </button>
-
           <QuickTools />
           <QuickNoteButton />
 
@@ -195,7 +179,23 @@ export default function TopRightPane() {
             `}
             title={rightSidebarVisible ? 'Hide right sidebar' : 'Show right sidebar'}
           >
-            <Icon name={rightSidebarVisible ? 'panel-right-close' : 'panel-right-open'} size={15} />
+            <Icon name="zap" size={15} />
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleRightCorner}
+            className={`
+              w-7 h-7 rounded-lg flex flex-shrink-0 items-center justify-center transition-colors cursor-pointer
+              ${
+                rightCornerVisible
+                  ? 'bg-white text-[var(--color-accent)] border border-[var(--color-border-subtle)] shadow-sm'
+                  : 'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-secondary)]'
+              }
+            `}
+            title={rightCornerVisible ? 'Hide right corner sidebar' : 'Show right corner sidebar'}
+          >
+            <Icon name={rightCornerVisible ? 'panel-right-close' : 'panel-right-open'} size={15} />
           </button>
         </div>
       </div>

@@ -166,7 +166,7 @@ export default function GlobalModuleSearch() {
   return (
     <div
       ref={searchAreaRef}
-      className={`relative min-w-0 max-w-[620px] flex-1 rounded-xl transition-shadow duration-200 ${
+      className={`global-module-search relative min-w-0 max-w-[620px] flex-1 rounded-xl transition-shadow duration-200 ${
         searchHotkeyPulse ? 'ring-2 ring-[var(--color-accent)]/25 shadow-[0_0_0_4px_rgba(67,97,238,0.10)]' : ''
       }`}
     >
@@ -199,6 +199,7 @@ export default function GlobalModuleSearch() {
         onBlur={() => setSearchHotkeyPulse(false)}
         onKeyDown={handleSearchKeyDown}
         className="
+          global-search-input
           h-8 w-full rounded-xl border border-black/25
           bg-white pl-9 pr-20 text-xs text-[var(--color-text-primary)]
           shadow-sm transition-colors
@@ -207,7 +208,7 @@ export default function GlobalModuleSearch() {
         "
       />
       {!searchQuery && (
-        <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+        <div className="global-search-hotkeys pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
           <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-1.5 py-0.5 text-[9px] font-medium leading-none text-[var(--color-text-tertiary)]">
             Ctrl K
           </kbd>
