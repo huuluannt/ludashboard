@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Key, Loader2, Music, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
+import { Key, ListMusic, Loader2, Music, Pause, Play, Repeat, Search, Shuffle, SkipBack, SkipForward, Volume2, VolumeX, X } from 'lucide-react';
 import MusicPlaylists from '@/components/lumusic/MusicPlaylists';
 import MusicQueue from '@/components/lumusic/MusicQueue';
 import MusicResultCard from '@/components/lumusic/MusicResultCard';
@@ -52,6 +52,7 @@ export default function LuMusicModule() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(YOUTUBE_API_KEY_STORAGE_KEY) || '');
   const [apiKeyDraft, setApiKeyDraft] = useState(apiKey);
   const [showApiKeyPanel, setShowApiKeyPanel] = useState(false);
+  const [mobileLibraryOpen, setMobileLibraryOpen] = useState(false);
   const [playlistsCloudReady, setPlaylistsCloudReady] = useState(false);
   const playlistsUpdatedAtRef = useRef(playlistsUpdatedAt);
   const applyingRemotePlaylistsRef = useRef(false);
@@ -129,8 +130,13 @@ export default function LuMusicModule() {
     else setRepeatMode('off');
   };
 
+  const openMobileLibrary = (tab: 'playlists' | 'queue') => {
+    setSideTab(tab);
+    setMobileLibraryOpen(true);
+  };
+
   return (
-    <div className="flex h-full min-w-0 flex-col bg-white text-[var(--color-text-primary)]">
+    <div className="relative flex h-full min-w-0 flex-col bg-white text-[var(--color-text-primary)]">
       <header className="flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-[var(--color-border-subtle)] px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
@@ -176,6 +182,27 @@ export default function LuMusicModule() {
           <Key size={14} />
           {apiKey ? 'Key saved' : 'Add key'}
         </button>
+
+        <div className="grid w-full grid-cols-2 gap-2 lg:hidden">
+          <button
+            type="button"
+            onClick={() => openMobileLibrary('queue')}
+            className="flex h-9 items-center justify-center gap-2 rounded-xl bg-[var(--color-text-primary)] px-3 text-xs font-semibold text-white shadow-sm"
+          >
+            <ListMusic size={14} />
+            Queue
+            <span className="rounded-md bg-white/15 px-1.5 py-0.5 text-[10px]">{queue.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openMobileLibrary('playlists')}
+            className="flex h-9 items-center justify-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-semibold text-[var(--color-text-secondary)] shadow-sm"
+          >
+            <Music size={14} />
+            Playlists
+            <span className="rounded-md bg-[var(--color-surface-subtle)] px-1.5 py-0.5 text-[10px]">{playlists.length}</span>
+          </button>
+        </div>
       </header>
 
       {showApiKeyPanel && (
@@ -224,68 +251,68 @@ export default function LuMusicModule() {
         </div>
       )}
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 bg-[var(--color-surface-muted)] lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="min-h-0 overflow-y-auto px-4 pb-4 pt-4">
+      <main className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto bg-[var(--color-surface-muted)] lg:grid-cols-[minmax(0,1fr)_360px] lg:overflow-hidden">
+        <section className="min-h-0 px-4 pb-4 pt-4 lg:overflow-y-auto">
           {currentTrack && (
             <div className="mb-4 rounded-2xl border border-[var(--color-border)] bg-white p-3 shadow-sm">
-              <div className="flex items-center gap-3">
-              <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl bg-[var(--color-surface-muted)]">
-                {currentTrack.thumbnail ? <img src={currentTrack.thumbnail} alt="" className="h-full w-full object-cover" /> : null}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-accent)]">Now playing</p>
-                <h3 className="truncate text-sm font-semibold">{currentTrack.title}</h3>
-                <p className="truncate text-xs text-[var(--color-text-tertiary)]">{currentTrack.channelTitle}</p>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={previousTrack}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]"
-                  title="Previous"
-                >
-                  <SkipBack size={15} fill="currentColor" />
-                </button>
-              <button
-                type="button"
-                  onClick={isPlaying ? pause : play}
-                  className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--color-text-primary)] text-white hover:bg-black"
-                  title={isPlaying ? 'Pause' : 'Play'}
-              >
-                  {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
-              </button>
-                <button
-                  type="button"
-                  onClick={nextTrack}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]"
-                  title="Next"
-                >
-                  <SkipForward size={15} fill="currentColor" />
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleShuffle}
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                    shuffle ? 'bg-blue-50 text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]'
-                  }`}
-                  title="Shuffle"
-                >
-                  <Shuffle size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={cycleRepeat}
-                  className={`relative flex h-9 w-9 items-center justify-center rounded-xl ${
-                    repeatMode !== 'off'
-                      ? 'bg-blue-50 text-[var(--color-accent)]'
-                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]'
-                  }`}
-                  title={`Repeat ${repeatMode}`}
-                >
-                  <Repeat size={14} />
-                  {repeatMode === 'one' && <span className="absolute right-1 top-0 text-[8px] font-bold">1</span>}
-                </button>
-              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl bg-[var(--color-surface-muted)]">
+                  {currentTrack.thumbnail ? <img src={currentTrack.thumbnail} alt="" className="h-full w-full object-cover" /> : null}
+                </div>
+                <div className="min-w-[120px] flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-accent)]">Now playing</p>
+                  <h3 className="truncate text-sm font-semibold">{currentTrack.title}</h3>
+                  <p className="truncate text-xs text-[var(--color-text-tertiary)]">{currentTrack.channelTitle}</p>
+                </div>
+                <div className="order-3 flex w-full items-center justify-center gap-1 sm:order-none sm:w-auto sm:justify-start">
+                  <button
+                    type="button"
+                    onClick={previousTrack}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]"
+                    title="Previous"
+                  >
+                    <SkipBack size={15} fill="currentColor" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={isPlaying ? pause : play}
+                    className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--color-text-primary)] text-white hover:bg-black"
+                    title={isPlaying ? 'Pause' : 'Play'}
+                  >
+                    {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={nextTrack}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]"
+                    title="Next"
+                  >
+                    <SkipForward size={15} fill="currentColor" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleShuffle}
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                      shuffle ? 'bg-blue-50 text-[var(--color-accent)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]'
+                    }`}
+                    title="Shuffle"
+                  >
+                    <Shuffle size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cycleRepeat}
+                    className={`relative flex h-9 w-9 items-center justify-center rounded-xl ${
+                      repeatMode !== 'off'
+                        ? 'bg-blue-50 text-[var(--color-accent)]'
+                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]'
+                    }`}
+                    title={`Repeat ${repeatMode}`}
+                  >
+                    <Repeat size={14} />
+                    {repeatMode === 'one' && <span className="absolute right-1 top-0 text-[8px] font-bold">1</span>}
+                  </button>
+                </div>
               </div>
               <div className="mt-3 grid items-center gap-3 md:grid-cols-[1fr_160px]">
                 <div className="flex items-center gap-2 text-[10px] text-[var(--color-text-tertiary)]">
@@ -335,17 +362,19 @@ export default function LuMusicModule() {
               </div>
             </div>
           ) : searchResults.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-center">
-              <div className="max-w-sm">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--color-border)] bg-white text-[var(--color-accent)]">
-                  <Music size={26} />
+            currentTrack ? null : (
+              <div className="flex h-full items-center justify-center text-center">
+                <div className="max-w-sm">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--color-border)] bg-white text-[var(--color-accent)]">
+                    <Music size={26} />
+                  </div>
+                  <h3 className="text-base font-semibold">Search for music</h3>
+                  <p className="mt-2 text-sm leading-6 text-[var(--color-text-tertiary)]">
+                    LuMusic uses YouTube Data API results, then ranks them for songs instead of generic videos.
+                  </p>
                 </div>
-                <h3 className="text-base font-semibold">Search for music</h3>
-                <p className="mt-2 text-sm leading-6 text-[var(--color-text-tertiary)]">
-                  LuMusic uses YouTube Data API results, then ranks them for songs instead of generic videos.
-                </p>
               </div>
-            </div>
+            )
           ) : (
             <div className="mx-auto flex max-w-5xl flex-col gap-2.5">
               <div className="flex items-center justify-between">
@@ -368,8 +397,8 @@ export default function LuMusicModule() {
           )}
         </section>
 
-        <aside className="flex min-h-0 flex-col border-l border-[var(--color-border-subtle)] bg-white">
-          <div className="flex h-10 flex-shrink-0 border-b border-[var(--color-border-subtle)] px-2 py-1.5">
+        <aside className="flex min-h-0 flex-col bg-white lg:border-l lg:border-[var(--color-border-subtle)]">
+          <div className="hidden h-10 flex-shrink-0 border-b border-[var(--color-border-subtle)] px-2 py-1.5 lg:flex">
             {(['queue', 'playlists'] as const).map((tab) => (
               <button
                 key={tab}
@@ -385,7 +414,9 @@ export default function LuMusicModule() {
               </button>
             ))}
           </div>
-          {sideTab === 'queue' ? <MusicQueue /> : <MusicPlaylists />}
+          <div className="hidden min-h-0 flex-1 flex-col lg:flex">
+            {sideTab === 'queue' ? <MusicQueue /> : <MusicPlaylists />}
+          </div>
           {currentTrack && (
             <div className="flex-shrink-0 border-t border-[var(--color-border-subtle)] bg-white p-3">
               <div className="mb-2 flex items-center justify-between">
@@ -401,6 +432,52 @@ export default function LuMusicModule() {
           )}
         </aside>
       </main>
+
+      {mobileLibraryOpen && (
+        <div className="absolute inset-0 z-40 flex items-end bg-black/35 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close music library"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setMobileLibraryOpen(false)}
+          />
+          <section className="relative flex max-h-[85%] min-h-[360px] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl">
+            <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-[var(--color-border-subtle)] px-3">
+              <div className="flex min-w-0 flex-1 rounded-xl bg-[var(--color-surface-subtle)] p-1">
+                {(['queue', 'playlists'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setSideTab(tab)}
+                    className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold capitalize transition-colors ${
+                      sideTab === tab
+                        ? 'bg-[var(--color-text-primary)] text-white shadow-sm'
+                        : 'text-[var(--color-text-secondary)]'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileLibraryOpen(false)}
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+                title="Close"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {sideTab === 'queue' ? (
+                <MusicQueue onTrackPlay={() => setMobileLibraryOpen(false)} />
+              ) : (
+                <MusicPlaylists onTrackPlay={() => setMobileLibraryOpen(false)} />
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

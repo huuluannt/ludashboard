@@ -252,6 +252,7 @@ export default function GlobalModuleSearch() {
           ) : (
             searchResults.map((mod, index) => {
               const selected = index === selectedSearchIndex;
+              const iconToneClass = mod.source === 'native' ? 'module-icon-native' : '';
               return (
                 <div
                   key={mod.manifest.id}
@@ -269,7 +270,7 @@ export default function GlobalModuleSearch() {
                   }`}
                 >
                   <span
-                    className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border ${
+                    className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border ${iconToneClass} ${
                       selected
                         ? 'border-white/20 bg-white/10 text-white'
                         : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] text-[var(--color-text-secondary)]'

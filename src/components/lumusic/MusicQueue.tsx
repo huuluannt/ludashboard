@@ -1,7 +1,11 @@
 import { ArrowDown, ArrowUp, ListMusic, Play, Trash2, X } from 'lucide-react';
 import { selectCurrentTrack, useMusicStore } from '@/state/musicStore';
 
-export default function MusicQueue() {
+interface MusicQueueProps {
+  onTrackPlay?: () => void;
+}
+
+export default function MusicQueue({ onTrackPlay }: MusicQueueProps) {
   const queue = useMusicStore((state) => state.queue);
   const currentIndex = useMusicStore((state) => state.currentIndex);
   const currentTrack = useMusicStore(selectCurrentTrack);
@@ -44,7 +48,10 @@ export default function MusicQueue() {
               >
                 <button
                   type="button"
-                  onClick={() => playTrack(track, queue)}
+                  onClick={() => {
+                    playTrack(track, queue);
+                    onTrackPlay?.();
+                  }}
                   className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface-muted)]"
                   title="Play from queue"
                 >

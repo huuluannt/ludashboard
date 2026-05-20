@@ -2,7 +2,11 @@ import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Edit2, ListMusic, Play, Plus, Trash2, X } from 'lucide-react';
 import { useMusicStore } from '@/state/musicStore';
 
-export default function MusicPlaylists() {
+interface MusicPlaylistsProps {
+  onTrackPlay?: () => void;
+}
+
+export default function MusicPlaylists({ onTrackPlay }: MusicPlaylistsProps) {
   const playlists = useMusicStore((state) => state.playlists);
   const createPlaylist = useMusicStore((state) => state.createPlaylist);
   const renamePlaylist = useMusicStore((state) => state.renamePlaylist);
@@ -104,7 +108,10 @@ export default function MusicPlaylists() {
                 )}
                 <button
                   type="button"
-                  onClick={() => playPlaylist(selectedPlaylist.id)}
+                  onClick={() => {
+                    playPlaylist(selectedPlaylist.id);
+                    onTrackPlay?.();
+                  }}
                   disabled={selectedPlaylist.tracks.length === 0}
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-35"
                   title="Play playlist"
@@ -141,7 +148,10 @@ export default function MusicPlaylists() {
                   <div key={track.videoId} className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--color-surface-muted)]">
                     <button
                       type="button"
-                      onClick={() => playPlaylist(selectedPlaylist.id, index)}
+                      onClick={() => {
+                        playPlaylist(selectedPlaylist.id, index);
+                        onTrackPlay?.();
+                      }}
                       className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface-muted)]"
                     >
                       {track.thumbnail ? <img src={track.thumbnail} alt="" className="h-full w-full object-cover" /> : null}

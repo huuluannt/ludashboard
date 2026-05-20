@@ -5,6 +5,8 @@ import { selectCurrentTrack, useMusicStore } from '@/state/musicStore';
 export default function YouTubeMusicPlayer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
+  const pendingAutoplayRef = useRef(false);
+  const pendingAutoplayTimerRef = useRef<number | null>(null);
   const currentTrack = useMusicStore(selectCurrentTrack);
   const isPlaying = useMusicStore((state) => state.isPlaying);
   const volume = useMusicStore((state) => state.volume);
@@ -17,6 +19,23 @@ export default function YouTubeMusicPlayer() {
   const setPlayerMessage = useMusicStore((state) => state.setPlayerMessage);
   const nextTrack = useMusicStore((state) => state.nextTrack);
   const restartCurrent = useMusicStore((state) => state.restartCurrent);
+
+  const clearPendingAutoplay = () => {
+    pendingAutoplayRef.current = false;
+    if (pendingAutoplayTimerRef.current != null) {
+      window.clearTimeout(pendingAutoplayTimerRef.current);
+      pendingAutoplayTimerRef.current = null;
+    }
+  };
+
+  const markPendingAutoplay = () => {
+    clearPendingAutoplay();
+    pendingAutoplayRef.current = true;
+    pendingAutoplayTimerRef.current = window.setTimeout(() => {
+      pendingAutoplayRef.current = false;
+      pendingAutoplayTimerRef.current = null;
+    }, 2500);
+  };
 
   useEffect(() => {
     if (!currentTrack || !containerRef.current) return undefined;
@@ -42,7 +61,13 @@ export default function YouTubeMusicPlayer() {
           },
           events: {
             onReady: (event: any) => {
-              event.target.loadVideoById(currentTrack.videoId);
+              const startSeconds = Math.max(0, Math.floor(useMusicStore.getState().currentTime || 0));
+              if (isPlaying) {
+                markPendingAutoplay();
+                event.target.loadVideoById({ videoId: currentTrack.videoId, startSeconds });
+              } else {
+                event.target.cueVideoById({ videoId: currentTrack.videoId, startSeconds });
+              }
               event.target.setVolume(volume);
               if (volume <= 0) event.target.mute?.();
               else event.target.unMute?.();
@@ -58,11 +83,18 @@ export default function YouTubeMusicPlayer() {
             },
             onStateChange: (event: any) => {
               if (event.data === 0) {
+                clearPendingAutoplay();
                 if (repeatMode === 'one') restartCurrent();
                 else nextTrack();
               }
-              if (event.data === 1) setIsPlaying(true);
-              if (event.data === 2) setIsPlaying(false);
+              if (event.data === 1) {
+                clearPendingAutoplay();
+                setIsPlaying(true);
+              }
+              if (event.data === 2) {
+                if (pendingAutoplayRef.current) return;
+                setIsPlaying(false);
+              }
             },
             onError: () => {
               setPlayerMessage('This track is unavailable or cannot be embedded.');
@@ -81,11 +113,17 @@ export default function YouTubeMusicPlayer() {
   useEffect(() => {
     if (!currentTrack || !playerRef.current) return;
     try {
-      playerRef.current.loadVideoById(currentTrack.videoId);
+      const startSeconds = Math.max(0, Math.floor(useMusicStore.getState().currentTime || 0));
+      if (isPlaying) {
+        markPendingAutoplay();
+        playerRef.current.loadVideoById({ videoId: currentTrack.videoId, startSeconds });
+        playerRef.current.playVideo();
+      } else {
+        playerRef.current.cueVideoById({ videoId: currentTrack.videoId, startSeconds });
+      }
       playerRef.current.setVolume(volume);
       if (volume <= 0) playerRef.current.mute?.();
       else playerRef.current.unMute?.();
-      if (!isPlaying) playerRef.current.pauseVideo();
       setPlayerMessage('');
     } catch {
       setPlayerMessage('This track is unavailable or cannot be embedded.');
@@ -145,6 +183,7 @@ export default function YouTubeMusicPlayer() {
       } catch {
         // Best effort cleanup for the iframe player.
       }
+      clearPendingAutoplay();
       playerRef.current = null;
     };
   }, []);

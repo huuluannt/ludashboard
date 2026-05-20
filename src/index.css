@@ -117,6 +117,16 @@ body {
   transform: scale(0.98);
 }
 
+.module-icon-native {
+  background: #fff7df;
+  border-color: #f2dfa3;
+  color: #9a6a00;
+}
+
+.module-icon-native svg {
+  color: #9a6a00;
+}
+
 /* ===== Upward dropdown animation ===== */
 .dropdown-up-enter {
   animation: dropdownUpIn 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;

@@ -66,8 +66,11 @@ interface MusicStore {
 
 const PLAYLISTS_KEY = 'lumusic_playlists';
 const PLAYLISTS_UPDATED_AT_KEY = 'lumusic_playlists_updated_at';
+const PLAYBACK_SESSION_KEY = 'lumusic_playback_session';
 const VOLUME_KEY = 'lumusic_volume';
 const LAST_VOLUME_KEY = 'lumusic_last_volume';
+
+const storedPlaybackSession = loadStoredPlaybackSession();
 
 export const useMusicStore = create<MusicStore>((set, get) => ({
   searchQuery: '',
@@ -76,15 +79,15 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
   isSearching: false,
   error: '',
   playerMessage: '',
-  queue: [],
-  currentIndex: -1,
+  queue: storedPlaybackSession?.queue ?? [],
+  currentIndex: storedPlaybackSession?.currentIndex ?? -1,
   isPlaying: false,
   volume: loadStoredVolume(),
   lastVolume: loadStoredLastVolume(),
-  repeatMode: 'off',
-  shuffle: false,
-  currentTime: 0,
-  duration: 0,
+  repeatMode: storedPlaybackSession?.repeatMode ?? 'off',
+  shuffle: storedPlaybackSession?.shuffle ?? false,
+  currentTime: storedPlaybackSession?.currentTime ?? 0,
+  duration: storedPlaybackSession?.duration ?? 0,
   playbackNonce: 0,
   seekNonce: 0,
   seekTo: 0,
@@ -117,18 +120,21 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       duration: track.durationSeconds || 0,
       playbackNonce: get().playbackNonce + 1,
     });
+    persistPlaybackSession(get());
   },
 
   addToQueue: (track) =>
     set((state) => {
       if (state.queue.some((item) => item.videoId === track.videoId)) return state;
       const nextQueue = [...state.queue, track];
-      return {
+      const nextState = {
         queue: nextQueue,
         currentIndex: state.currentIndex === -1 ? 0 : state.currentIndex,
         isPlaying: state.currentIndex === -1 ? true : state.isPlaying,
         playbackNonce: state.currentIndex === -1 ? state.playbackNonce + 1 : state.playbackNonce,
       };
+      persistPlaybackSession({ ...state, ...nextState });
+      return nextState;
     }),
 
   removeFromQueue: (videoId) =>
@@ -137,13 +143,17 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       if (removedIndex === -1) return state;
       const nextQueue = state.queue.filter((track) => track.videoId !== videoId);
       if (nextQueue.length === 0) {
-        return { queue: [], currentIndex: -1, isPlaying: false, currentTime: 0, duration: 0 };
+        const nextState = { queue: [], currentIndex: -1, isPlaying: false, currentTime: 0, duration: 0 };
+        persistPlaybackSession({ ...state, ...nextState });
+        return nextState;
       }
       const nextIndex = Math.min(
         removedIndex < state.currentIndex ? state.currentIndex - 1 : state.currentIndex,
         nextQueue.length - 1,
       );
-      return { queue: nextQueue, currentIndex: nextIndex };
+      const nextState = { queue: nextQueue, currentIndex: nextIndex };
+      persistPlaybackSession({ ...state, ...nextState });
+      return nextState;
     }),
 
   moveQueueTrack: (fromIndex, toIndex) =>
@@ -160,17 +170,22 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       queue.splice(toIndex, 0, movedTrack);
       const currentIndex = currentTrack ? queue.findIndex((track) => track.videoId === currentTrack.videoId) : state.currentIndex;
 
-      return {
+      const nextState = {
         queue,
         currentIndex: currentIndex >= 0 ? currentIndex : Math.min(state.currentIndex, queue.length - 1),
       };
+      persistPlaybackSession({ ...state, ...nextState });
+      return nextState;
     }),
 
   clearQueue: () =>
     set((state) => {
       const currentTrack = state.queue[state.currentIndex];
-      if (!currentTrack) return { queue: [], currentIndex: -1, isPlaying: false };
-      return { queue: [currentTrack], currentIndex: 0 };
+      const nextState = currentTrack
+        ? { queue: [currentTrack], currentIndex: 0 }
+        : { queue: [], currentIndex: -1, isPlaying: false };
+      persistPlaybackSession({ ...state, ...nextState });
+      return nextState;
     }),
 
   nextTrack: () => {
@@ -179,15 +194,21 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     if (state.shuffle && state.queue.length > 1) {
       let nextIndex = Math.floor(Math.random() * state.queue.length);
       if (nextIndex === state.currentIndex) nextIndex = (nextIndex + 1) % state.queue.length;
-      set({ currentIndex: nextIndex, isPlaying: true, currentTime: 0, playbackNonce: state.playbackNonce + 1 });
+      const nextState = { currentIndex: nextIndex, isPlaying: true, currentTime: 0, playbackNonce: state.playbackNonce + 1 };
+      set(nextState);
+      persistPlaybackSession({ ...state, ...nextState });
       return;
     }
     if (state.currentIndex < state.queue.length - 1) {
-      set({ currentIndex: state.currentIndex + 1, isPlaying: true, currentTime: 0, playbackNonce: state.playbackNonce + 1 });
+      const nextState = { currentIndex: state.currentIndex + 1, isPlaying: true, currentTime: 0, playbackNonce: state.playbackNonce + 1 };
+      set(nextState);
+      persistPlaybackSession({ ...state, ...nextState });
       return;
     }
     if (state.repeatMode === 'all') {
-      set({ currentIndex: 0, isPlaying: true, currentTime: 0, playbackNonce: state.playbackNonce + 1 });
+      const nextState = { currentIndex: 0, isPlaying: true, currentTime: 0, playbackNonce: state.playbackNonce + 1 };
+      set(nextState);
+      persistPlaybackSession({ ...state, ...nextState });
       return;
     }
     set({ isPlaying: false });
@@ -197,10 +218,17 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     const state = get();
     if (state.queue.length === 0) return;
     const nextIndex = state.currentIndex > 0 ? state.currentIndex - 1 : 0;
-    set({ currentIndex: nextIndex, isPlaying: true, currentTime: 0, playbackNonce: state.playbackNonce + 1 });
+    const nextState = { currentIndex: nextIndex, isPlaying: true, currentTime: 0, playbackNonce: state.playbackNonce + 1 };
+    set(nextState);
+    persistPlaybackSession({ ...state, ...nextState });
   },
 
-  restartCurrent: () => set((state) => ({ currentTime: 0, isPlaying: true, playbackNonce: state.playbackNonce + 1 })),
+  restartCurrent: () =>
+    set((state) => {
+      const nextState = { currentTime: 0, isPlaying: true, playbackNonce: state.playbackNonce + 1 };
+      persistPlaybackSession({ ...state, ...nextState });
+      return nextState;
+    }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -227,10 +255,26 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       localStorage.setItem(LAST_VOLUME_KEY, String(restoredVolume));
       return { volume: restoredVolume, lastVolume: restoredVolume };
     }),
-  setRepeatMode: (repeatMode) => set({ repeatMode }),
-  toggleShuffle: () => set((state) => ({ shuffle: !state.shuffle })),
-  setProgress: (currentTime, duration) => set({ currentTime, duration }),
-  requestSeek: (seconds) => set((state) => ({ seekTo: seconds, seekNonce: state.seekNonce + 1 })),
+  setRepeatMode: (repeatMode) => {
+    set({ repeatMode });
+    persistPlaybackSession(get());
+  },
+  toggleShuffle: () =>
+    set((state) => {
+      const nextState = { shuffle: !state.shuffle };
+      persistPlaybackSession({ ...state, ...nextState });
+      return nextState;
+    }),
+  setProgress: (currentTime, duration) => {
+    set({ currentTime, duration });
+    persistPlaybackSession({ ...get(), currentTime, duration });
+  },
+  requestSeek: (seconds) =>
+    set((state) => {
+      const nextState = { seekTo: seconds, seekNonce: state.seekNonce + 1, currentTime: seconds };
+      persistPlaybackSession({ ...state, ...nextState });
+      return nextState;
+    }),
 
   createPlaylist: (name) => {
     const trimmed = name.trim();
@@ -314,6 +358,7 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       duration: playlist.tracks[boundedIndex]?.durationSeconds || 0,
       playbackNonce: get().playbackNonce + 1,
     });
+    persistPlaybackSession(get());
   },
   setPlaylistsFromCloud: (playlists, updatedAt) => {
     localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
@@ -337,6 +382,71 @@ function updatePlaylists(
     localStorage.setItem(PLAYLISTS_UPDATED_AT_KEY, String(updatedAt));
     return { playlists, playlistsUpdatedAt: updatedAt };
   });
+}
+
+function persistPlaybackSession(state: Pick<MusicStore, 'queue' | 'currentIndex' | 'currentTime' | 'duration' | 'repeatMode' | 'shuffle'>) {
+  const queue = dedupeTracks(state.queue);
+  if (queue.length === 0 || state.currentIndex < 0) {
+    localStorage.removeItem(PLAYBACK_SESSION_KEY);
+    return;
+  }
+
+  const currentIndex = Math.max(0, Math.min(state.currentIndex, queue.length - 1));
+  const currentTrack = queue[currentIndex];
+  const duration = Math.max(0, state.duration || currentTrack?.durationSeconds || 0);
+  const currentTime = Math.max(0, Math.min(state.currentTime || 0, Math.max(duration, state.currentTime || 0)));
+
+  localStorage.setItem(
+    PLAYBACK_SESSION_KEY,
+    JSON.stringify({
+      queue,
+      currentIndex,
+      currentTime,
+      duration,
+      repeatMode: state.repeatMode,
+      shuffle: state.shuffle,
+      updatedAt: Date.now(),
+    }),
+  );
+}
+
+function loadStoredPlaybackSession() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PLAYBACK_SESSION_KEY) || 'null');
+    if (!parsed || !Array.isArray(parsed.queue)) return null;
+
+    const queue = dedupeTracks(parsed.queue.filter(isMusicTrack));
+    if (queue.length === 0) return null;
+
+    const currentIndex = Number.isInteger(parsed.currentIndex)
+      ? Math.max(0, Math.min(parsed.currentIndex, queue.length - 1))
+      : 0;
+    const currentTrack = queue[currentIndex];
+    const duration = Math.max(0, Number(parsed.duration) || currentTrack?.durationSeconds || 0);
+    const currentTime = Math.max(0, Math.min(Number(parsed.currentTime) || 0, Math.max(duration, Number(parsed.currentTime) || 0)));
+    const repeatMode: RepeatMode = parsed.repeatMode === 'all' || parsed.repeatMode === 'one' ? parsed.repeatMode : 'off';
+
+    return {
+      queue,
+      currentIndex,
+      currentTime,
+      duration,
+      repeatMode,
+      shuffle: parsed.shuffle === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isMusicTrack(track: unknown): track is MusicTrack {
+  if (!track || typeof track !== 'object') return false;
+  const candidate = track as Partial<MusicTrack>;
+  return (
+    typeof candidate.videoId === 'string' &&
+    typeof candidate.title === 'string' &&
+    typeof candidate.channelTitle === 'string'
+  );
 }
 
 function loadStoredPlaylists(): MusicPlaylist[] {

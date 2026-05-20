@@ -134,10 +134,14 @@ export default function LeftPane() {
 
   const openTabItems = useMemo(
     () =>
-      tabs.map((tab) => ({
-        tab,
-        manifest: moduleRegistry.get(tab.moduleId)?.manifest,
-      })),
+      tabs.map((tab) => {
+        const mod = moduleRegistry.get(tab.moduleId);
+        return {
+          tab,
+          manifest: mod?.manifest,
+          source: mod?.source,
+        };
+      }),
     [registryVersion, tabs],
   );
 
@@ -405,11 +409,12 @@ export default function LeftPane() {
 
       <div className="flex-1 overflow-y-auto px-1.5 py-1">
         {collapsed ? (
-          openTabItems.map(({ tab, manifest }) => (
+          openTabItems.map(({ tab, manifest, source }) => (
             <OpenModuleCard
               key={tab.moduleId}
               tab={tab}
               manifest={manifest}
+              source={source}
               collapsed
               active={tab.moduleId === activeTabId}
               isDragging={draggedTabId === tab.moduleId}
@@ -460,11 +465,12 @@ export default function LeftPane() {
               </div>
             ) : null}
 
-            {openTabItems.map(({ tab, manifest }) => (
+            {openTabItems.map(({ tab, manifest, source }) => (
               <OpenModuleCard
                 key={tab.moduleId}
                 tab={tab}
                 manifest={manifest}
+                source={source}
                 active={tab.moduleId === activeTabId}
                 isDragging={draggedTabId === tab.moduleId}
                 onOpen={() => setActiveTab(tab.moduleId)}
@@ -550,6 +556,7 @@ export default function LeftPane() {
 interface OpenModuleCardProps {
   tab: TabItem;
   manifest?: ModuleManifest;
+  source?: RegisteredModule['source'];
   active: boolean;
   collapsed?: boolean;
   isDragging: boolean;
@@ -563,6 +570,7 @@ interface OpenModuleCardProps {
 function OpenModuleCard({
   tab,
   manifest,
+  source,
   active,
   collapsed = false,
   isDragging,
@@ -573,6 +581,7 @@ function OpenModuleCard({
   onDrop,
 }: OpenModuleCardProps) {
   const [dragOver, setDragOver] = useState(false);
+  const iconToneClass = source === 'native' ? 'module-icon-native' : '';
 
   const isCardAction = (target: EventTarget | null) => {
     return target instanceof HTMLElement && target.closest('[data-open-card-action]') != null;
@@ -625,7 +634,9 @@ function OpenModuleCard({
         } ${dragOver ? 'bg-[var(--color-surface-muted)]' : ''}`}
       >
         <div
-          className={`w-8 h-8 rounded-lg border flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
+          className={`w-8 h-8 rounded-lg border flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${iconToneClass} ${
+            active && iconToneClass ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface-subtle)]' : ''
+          } ${
             active
               ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white'
               : 'bg-white border-[var(--color-border-subtle)] text-[var(--color-text-secondary)]'
@@ -658,7 +669,7 @@ function OpenModuleCard({
         active ? 'bg-white ring-1 ring-black/10 shadow-sm' : 'hover:bg-white/70'
       } ${isDragging ? 'opacity-45' : ''} ${dragOver ? 'ring-1 ring-[var(--color-accent)]/25 bg-[var(--color-surface-muted)]' : ''}`}
     >
-      <div className="w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center flex-shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className={`w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center flex-shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${iconToneClass}`}>
         <Icon name={tab.icon} size={20} className="text-[var(--color-text-secondary)]" />
       </div>
       <div className="flex-1 min-w-0">
@@ -723,6 +734,7 @@ function ModuleCard({
   const [dragOver, setDragOver] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isImported = importedMod != null;
+  const iconToneClass = mod.source === 'native' ? 'module-icon-native' : '';
 
   const stopCardAction = (event: SyntheticEvent) => {
     event.stopPropagation();
@@ -791,7 +803,7 @@ function ModuleCard({
           ${dragOver ? 'bg-[var(--color-surface-muted)]' : ''}
         `}
       >
-        <div className="w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center">
+        <div className={`w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center ${iconToneClass}`}>
           <Icon name={mod.manifest.icon} size={20} className="text-[var(--color-text-secondary)]" />
         </div>
       </button>
@@ -827,7 +839,7 @@ function ModuleCard({
         if (!isCardAction(event.target)) onOpen();
       }}
     >
-      <div className="w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center flex-shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className={`w-8 h-8 rounded-lg bg-white border border-[var(--color-border-subtle)] flex items-center justify-center flex-shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${iconToneClass}`}>
         <Icon name={mod.manifest.icon} size={20} className="text-[var(--color-text-secondary)]" />
       </div>
       <div className="flex-1 min-w-0">
