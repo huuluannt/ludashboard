@@ -11,6 +11,20 @@ import calendarCallbackHandler from './api/calendar/callback.js';
 import calendarAccountsHandler from './api/calendar/accounts.js';
 import calendarCalendarsHandler from './api/calendar/calendars.js';
 import calendarEventsHandler from './api/calendar/events.js';
+import gmailConnectHandler from './api/gmail/connect.js';
+import gmailCallbackHandler from './api/gmail/callback.js';
+import gmailAccountsHandler from './api/gmail/accounts.js';
+import gmailLabelsHandler from './api/gmail/labels.js';
+import gmailMessagesHandler from './api/gmail/messages.js';
+import driveConnectHandler from './api/drive/connect.js';
+import driveCallbackHandler from './api/drive/callback.js';
+import driveAccountsHandler from './api/drive/accounts.js';
+import driveFilesHandler from './api/drive/files.js';
+import oneDriveConnectHandler from './api/onedrive/connect.js';
+import oneDriveCallbackHandler from './api/onedrive/callback.js';
+import oneDriveAccountsHandler from './api/onedrive/accounts.js';
+import oneDriveFilesHandler from './api/onedrive/files.js';
+import oneDriveContentHandler from './api/onedrive/content.js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -61,6 +75,62 @@ export default defineConfig(({ mode }) => {
           }
           if (pathname === '/api/calendar/events') {
             await calendarEventsHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/gmail/connect') {
+            await gmailConnectHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/gmail/callback') {
+            await gmailCallbackHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/gmail/accounts') {
+            await gmailAccountsHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/gmail/labels') {
+            await gmailLabelsHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/gmail/messages') {
+            await gmailMessagesHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/drive/connect') {
+            await driveConnectHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/drive/callback') {
+            await driveCallbackHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/drive/accounts') {
+            await driveAccountsHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/drive/files') {
+            await driveFilesHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/onedrive/connect') {
+            await oneDriveConnectHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/onedrive/callback') {
+            await oneDriveCallbackHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/onedrive/accounts') {
+            await oneDriveAccountsHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/onedrive/files') {
+            await oneDriveFilesHandler(req, res);
+            return;
+          }
+          if (pathname === '/api/onedrive/content') {
+            await oneDriveContentHandler(req, res);
             return;
           }
           next();

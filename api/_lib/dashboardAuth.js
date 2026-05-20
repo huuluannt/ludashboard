@@ -1,10 +1,10 @@
 import { sendJson } from './http.js';
 
-export async function requireDashboardUser(req, res) {
+export async function requireDashboardUser(req, res, appName = 'LuCalendar') {
   const authHeader = String(req.headers.authorization || '');
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) {
-    sendJson(res, 401, { error: 'Sign in to LuDashboard before using LuCalendar.' });
+    sendJson(res, 401, { error: `Sign in to LuDashboard before using ${appName}.` });
     return null;
   }
 
@@ -37,4 +37,3 @@ export async function requireDashboardUser(req, res) {
     return null;
   }
 }
-

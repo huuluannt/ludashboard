@@ -104,6 +104,7 @@ async function handleCreateEvent(req, res, ownerId) {
     body: JSON.stringify({
       summary: title,
       description,
+      visibility: 'private',
       start: {
         dateTime: `${date}T${normalizeTime(startTime)}:00`,
         timeZone,
@@ -183,4 +184,3 @@ function normalizeTime(value) {
   const minute = Math.min(59, Math.max(0, Number(match[2])));
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
-

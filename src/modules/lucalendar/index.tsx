@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
 import Icon from '@/components/Icon';
 import { app } from '@/firebase/config';
@@ -199,11 +199,6 @@ export default function LuCalendarModule() {
     setStatus('Event created.');
   };
 
-  const openNewEventForm = () => {
-    setDetailsPanelOpen(true);
-    setShowAddForm(true);
-  };
-
   if (!dashboardUser) {
     return (
       <div className="flex h-full items-center justify-center bg-white p-6 text-center">
@@ -238,18 +233,13 @@ export default function LuCalendarModule() {
           </div>
         </div>
 
-        <select
+        <CalendarAccountDropdown
+          accounts={accounts}
           value={accountFilter}
-          onChange={(event) => setAccountFilter(event.target.value)}
-          className="h-8 min-w-[190px] rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs font-medium outline-none focus:border-[var(--color-accent)] focus:bg-white"
-        >
-          <option value="all">All connected calendars</option>
-          {accounts.map((account) => (
-            <option key={account.accountId} value={account.accountId}>
-              {account.email}{account.needsReconnect ? ' (Reconnect account)' : ''}
-            </option>
-          ))}
-        </select>
+          connecting={connecting}
+          onChange={setAccountFilter}
+          onConnect={connectAccount}
+        />
 
         {accountFilter !== 'all' && (
           <button
@@ -277,26 +267,6 @@ export default function LuCalendarModule() {
             <Icon name="chevron-right" size={14} />
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={connectAccount}
-          disabled={connecting}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-[var(--color-text-primary)] px-3 text-xs font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Icon name="plus" size={13} />
-          {connecting ? 'Connecting' : 'Connect account'}
-        </button>
-
-        <button
-          type="button"
-          onClick={openNewEventForm}
-          disabled={accounts.length === 0}
-          className="flex h-8 items-center gap-1.5 rounded-lg bg-white px-3 text-xs font-semibold text-[var(--color-text-secondary)] shadow-sm transition-colors hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Icon name="plus" size={13} />
-          New event
-        </button>
 
         <button
           type="button"
@@ -438,6 +408,129 @@ export default function LuCalendarModule() {
   );
 }
 
+interface CalendarAccountDropdownProps {
+  accounts: CalendarAccount[];
+  value: string;
+  connecting: boolean;
+  onChange: (value: string) => void;
+  onConnect: () => void | Promise<void>;
+}
+
+function CalendarAccountDropdown({ accounts, value, connecting, onChange, onConnect }: CalendarAccountDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const selectedAccount = accounts.find((account) => account.accountId === value);
+  const selectedLabel = selectedAccount
+    ? `${selectedAccount.email}${selectedAccount.needsReconnect ? ' (Reconnect)' : ''}`
+    : 'All connected calendars';
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (event.target instanceof Node && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const chooseAccount = (nextValue: string) => {
+    onChange(nextValue);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={dropdownRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-8 min-w-[210px] max-w-[280px] items-center justify-between gap-2 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs font-medium text-[var(--color-text-primary)] outline-none transition-colors hover:bg-white focus:border-[var(--color-accent)] focus:bg-white"
+      >
+        <span className="truncate">{selectedLabel}</span>
+        <Icon name="chevron-right" size={14} className={`flex-shrink-0 transition-transform ${open ? '-rotate-90' : 'rotate-90'}`} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+0.35rem)] z-40 w-72 overflow-hidden rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-xl"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => chooseAccount('all')}
+            className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
+              value === 'all'
+                ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
+                : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-subtle)]'
+            }`}
+          >
+            <span>All connected calendars</span>
+            {value === 'all' && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+          </button>
+
+          {accounts.map((account) => {
+            const selected = account.accountId === value;
+            return (
+              <button
+                key={account.accountId}
+                type="button"
+                role="menuitem"
+                onClick={() => chooseAccount(account.accountId)}
+                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
+                  selected
+                    ? 'bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
+                    : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-subtle)]'
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{account.email}</span>
+                  {account.needsReconnect && (
+                    <span className="mt-0.5 block text-[10px] font-semibold text-amber-600">Reconnect needed</span>
+                  )}
+                </span>
+                {selected && <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-current" />}
+              </button>
+            );
+          })}
+
+          <div className="my-1 border-t border-[var(--color-border-subtle)]" />
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              void onConnect();
+            }}
+            disabled={connecting}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:bg-[var(--color-surface-subtle)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Icon name="plus" size={13} />
+            {connecting ? 'Connecting...' : 'Connect account'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface DayDetailsPanelProps {
   date: Date;
   events: LuCalendarEvent[];
@@ -504,29 +597,36 @@ function DayDetailsPanel({
             <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">Create an event or choose another day.</p>
           </div>
         ) : (
-          events.map((event) => (
-            <article key={`${event.accountId}:${event.calendarId}:${event.id}`} className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-3">
-              <div className="flex items-start gap-2">
-                <span className="mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: event.color || '#4361ee' }} />
-                <div className="min-w-0 flex-1">
-                  <h4 className="break-words text-sm font-semibold">{event.title}</h4>
-                  <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">{formatEventTime(event)}</p>
-                  <p className="mt-1 truncate text-[10px] text-[var(--color-text-tertiary)]">
-                    {event.accountEmail} | {event.calendarSummary}
-                  </p>
-                  {event.description && <p className="mt-2 line-clamp-3 text-xs leading-5 text-[var(--color-text-secondary)]">{event.description}</p>}
+          events.map((event) => {
+            const description = cleanCalendarDescription(event.description);
+            return (
+              <article key={`${event.accountId}:${event.calendarId}:${event.id}`} className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-3">
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: event.color || '#4361ee' }} />
+                  <div className="min-w-0 flex-1">
+                    <h4 className="break-words text-sm font-semibold">{event.title}</h4>
+                    <p className="mt-1 text-[11px] text-[var(--color-text-secondary)]">{formatEventTime(event)}</p>
+                    <p className="mt-1 truncate text-[10px] text-[var(--color-text-tertiary)]">
+                      {event.accountEmail} | {event.calendarSummary}
+                    </p>
+                    {description && (
+                      <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--color-text-secondary)]">
+                        {description}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteEvent(event)}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-red-50 hover:text-[var(--color-danger)]"
+                    title="Delete event"
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onDeleteEvent(event)}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-red-50 hover:text-[var(--color-danger)]"
-                  title="Delete event"
-                >
-                  <Icon name="trash" size={14} />
-                </button>
-              </div>
-            </article>
-          ))
+              </article>
+            );
+          })
         )}
       </div>
     </div>
@@ -554,8 +654,9 @@ function AddEventForm({ dateKey, accounts, calendarsByAccount, accountFilter, on
   const [endTime, setEndTime] = useState(defaults.endTime);
   const [description, setDescription] = useState('');
   const [accountId, setAccountId] = useState(defaultAccountId);
-  const writableCalendars = getWritableCalendars(calendarsByAccount[accountId] || []);
-  const [calendarId, setCalendarId] = useState(writableCalendars[0]?.id || '');
+  const selectedAccount = availableAccounts.find((account) => account.accountId === accountId);
+  const writableCalendars = getPrivacyFirstWritableCalendars(calendarsByAccount[accountId] || [], selectedAccount);
+  const [calendarId, setCalendarId] = useState(getPreferredCalendarId(writableCalendars, selectedAccount));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -564,11 +665,12 @@ function AddEventForm({ dateKey, accounts, calendarsByAccount, accountFilter, on
   }, [dateKey]);
 
   useEffect(() => {
-    const calendars = getWritableCalendars(calendarsByAccount[accountId] || []);
+    const account = availableAccounts.find((item) => item.accountId === accountId);
+    const calendars = getPrivacyFirstWritableCalendars(calendarsByAccount[accountId] || [], account);
     if (!calendars.some((calendar) => calendar.id === calendarId)) {
-      setCalendarId(calendars[0]?.id || '');
+      setCalendarId(getPreferredCalendarId(calendars, account));
     }
-  }, [accountId, calendarId, calendarsByAccount]);
+  }, [accountId, availableAccounts, calendarId, calendarsByAccount]);
 
   const submit = async () => {
     if (!title.trim() || !accountId || !calendarId) return;
@@ -613,9 +715,12 @@ function AddEventForm({ dateKey, accounts, calendarsByAccount, accountFilter, on
         </select>
         <select value={calendarId} onChange={(event) => setCalendarId(event.target.value)} className="h-9 w-full rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs outline-none focus:border-[var(--color-accent)] focus:bg-white">
           {writableCalendars.map((calendar) => (
-            <option key={calendar.id} value={calendar.id}>{calendar.primary ? 'Primary - ' : ''}{calendar.summary}</option>
+            <option key={calendar.id} value={calendar.id}>{calendar.primary ? 'Personal - ' : ''}{calendar.summary}</option>
           ))}
         </select>
+        <p className="text-[10px] leading-4 text-[var(--color-text-tertiary)]">
+          New events default to your personal primary calendar for privacy.
+        </p>
         <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description optional" className="h-16 w-full resize-none rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-3 py-2 text-xs outline-none focus:border-[var(--color-accent)] focus:bg-white" />
         {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
         <button
@@ -633,4 +738,54 @@ function AddEventForm({ dateKey, accounts, calendarsByAccount, accountFilter, on
 
 function getWritableCalendars(calendars: CalendarInfo[]) {
   return calendars.filter((calendar) => calendar.accessRole === 'owner' || calendar.accessRole === 'writer');
+}
+
+function getPrivacyFirstWritableCalendars(calendars: CalendarInfo[], account?: CalendarAccount) {
+  return [...getWritableCalendars(calendars)].sort((first, second) => {
+    return getCalendarPrivacyRank(first, account) - getCalendarPrivacyRank(second, account) || first.summary.localeCompare(second.summary);
+  });
+}
+
+function getPreferredCalendarId(calendars: CalendarInfo[], account?: CalendarAccount) {
+  const primary = calendars.find((calendar) => calendar.primary);
+  if (primary) return primary.id;
+  const email = account?.email.toLowerCase() || '';
+  const personal = calendars.find((calendar) => {
+    const id = calendar.id.toLowerCase();
+    const summary = calendar.summary.toLowerCase();
+    return email && (id === email || summary === email);
+  });
+  return personal?.id || calendars[0]?.id || '';
+}
+
+function getCalendarPrivacyRank(calendar: CalendarInfo, account?: CalendarAccount) {
+  if (calendar.primary) return 0;
+
+  const email = account?.email.toLowerCase() || '';
+  const id = calendar.id.toLowerCase();
+  const summary = calendar.summary.toLowerCase();
+  if (email && (id === email || summary === email)) return 1;
+  if (/(family|shared|group|public)/i.test(calendar.summary)) return 50;
+  return 10;
+}
+
+function cleanCalendarDescription(description: string) {
+  if (!description) return '';
+  return decodeHtmlEntities(
+    description
+      .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<li[^>]*>/gi, '- ')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim(),
+  );
+}
+
+function decodeHtmlEntities(value: string) {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = value;
+  return textarea.value;
 }

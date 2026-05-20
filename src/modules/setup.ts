@@ -47,6 +47,15 @@ import { manifest as cloudStorageManifest } from './cloud-storage/manifest';
 import LuCalendarModule from './lucalendar/index';
 import { manifest as luCalendarManifest } from './lucalendar/manifest';
 
+import LuGmailModule from './lugmail/index';
+import { manifest as luGmailManifest } from './lugmail/manifest';
+
+import LuDriveModule from './ludrive/index';
+import { manifest as luDriveManifest } from './ludrive/manifest';
+
+import LuOnedriveModule from './luonedrive/index';
+import { manifest as luOnedriveManifest } from './luonedrive/manifest';
+
 // Placeholder modules
 import { placeholderManifests } from './placeholders';
 import PlaceholderModule from './PlaceholderModule';
@@ -73,6 +82,9 @@ export function setupModules() {
     { manifest: lugeminiManifest, component: LuGeminiModule, source: 'native' },
     { manifest: cloudStorageManifest, component: CloudStorageModule, source: 'native' },
     { manifest: luCalendarManifest, component: LuCalendarModule, source: 'native' },
+    { manifest: luGmailManifest, component: LuGmailModule, source: 'native' },
+    { manifest: luDriveManifest, component: LuDriveModule, source: 'native' },
+    { manifest: luOnedriveManifest, component: LuOnedriveModule, source: 'native' },
   ];
 
   for (const mod of builtInModules) {
