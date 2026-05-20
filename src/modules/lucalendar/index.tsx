@@ -10,11 +10,13 @@ import {
   fetchCalendars,
   removeCalendarAccount,
   startCalendarConnection,
+  updateCalendarEvent,
 } from './calendarApi';
 import {
   addMonths,
   formatDayTitle,
   formatEventTime,
+  getEventStartKey,
   formatMonthLabel,
   getDefaultEventTimes,
   getGridRange,
@@ -197,6 +199,20 @@ export default function LuCalendarModule() {
     ]);
     setShowAddForm(false);
     setStatus('Event created.');
+  };
+
+  const saveUpdatedEvent = (event: LuCalendarEvent) => {
+    const nextDateKey = getEventStartKey(event);
+    setEvents((current) =>
+      current.map((item) =>
+        item.id === event.id && item.calendarId === event.calendarId && item.accountId === event.accountId
+          ? event
+          : item,
+      ),
+    );
+    setSelectedDateKey(nextDateKey);
+    setCurrentMonth(startOfMonth(parseDateKey(nextDateKey)));
+    setStatus('Event updated.');
   };
 
   if (!dashboardUser) {
@@ -398,6 +414,7 @@ export default function LuCalendarModule() {
                 onClose={() => setDetailsPanelOpen(false)}
                 onDeleteEvent={deleteEvent}
                 onCreated={addCreatedEvent}
+                onUpdated={saveUpdatedEvent}
                 accountFilter={accountFilter}
               />
             </div>
@@ -542,6 +559,7 @@ interface DayDetailsPanelProps {
   onClose: () => void;
   onDeleteEvent: (event: LuCalendarEvent) => void;
   onCreated: (event: LuCalendarEvent) => void;
+  onUpdated: (event: LuCalendarEvent) => void;
 }
 
 function DayDetailsPanel({
@@ -555,7 +573,10 @@ function DayDetailsPanel({
   onClose,
   onDeleteEvent,
   onCreated,
+  onUpdated,
 }: DayDetailsPanelProps) {
+  const [editingEventKey, setEditingEventKey] = useState('');
+
   return (
     <div className="space-y-3">
       <div className="flex items-start gap-2">
@@ -598,9 +619,11 @@ function DayDetailsPanel({
           </div>
         ) : (
           events.map((event) => {
+            const eventKey = `${event.accountId}:${event.calendarId}:${event.id}`;
             const description = cleanCalendarDescription(event.description);
+            const editing = editingEventKey === eventKey;
             return (
-              <article key={`${event.accountId}:${event.calendarId}:${event.id}`} className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-3">
+              <article key={eventKey} className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-3">
                 <div className="flex items-start gap-2">
                   <span className="mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: event.color || '#4361ee' }} />
                   <div className="min-w-0 flex-1">
@@ -617,6 +640,14 @@ function DayDetailsPanel({
                   </div>
                   <button
                     type="button"
+                    onClick={() => setEditingEventKey(editing ? '' : eventKey)}
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-white hover:text-[var(--color-accent)]"
+                    title="Edit event"
+                  >
+                    <Icon name={editing ? 'x' : 'edit'} size={14} />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onDeleteEvent(event)}
                     className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-red-50 hover:text-[var(--color-danger)]"
                     title="Delete event"
@@ -624,6 +655,16 @@ function DayDetailsPanel({
                     <Icon name="trash" size={14} />
                   </button>
                 </div>
+                {editing && (
+                  <EditEventForm
+                    event={event}
+                    onCancel={() => setEditingEventKey('')}
+                    onSaved={(updatedEvent) => {
+                      setEditingEventKey('');
+                      onUpdated(updatedEvent);
+                    }}
+                  />
+                )}
               </article>
             );
           })
@@ -639,6 +680,146 @@ interface AddEventFormProps {
   calendarsByAccount: Record<string, CalendarInfo[]>;
   accountFilter: string;
   onCreated: (event: LuCalendarEvent) => void;
+}
+
+interface EditEventFormProps {
+  event: LuCalendarEvent;
+  onCancel: () => void;
+  onSaved: (event: LuCalendarEvent) => void;
+}
+
+function EditEventForm({ event, onCancel, onSaved }: EditEventFormProps) {
+  const [title, setTitle] = useState(event.title);
+  const [date, setDate] = useState(getEditableEventDate(event));
+  const [startTime, setStartTime] = useState(getEditableEventTime(event.start, '09:00'));
+  const [endTime, setEndTime] = useState(getEditableEventTime(event.end, '10:00'));
+  const [allDay, setAllDay] = useState(event.allDay);
+  const [description, setDescription] = useState(cleanCalendarDescription(event.description));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setTitle(event.title);
+    setDate(getEditableEventDate(event));
+    setStartTime(getEditableEventTime(event.start, '09:00'));
+    setEndTime(getEditableEventTime(event.end, '10:00'));
+    setAllDay(event.allDay);
+    setDescription(cleanCalendarDescription(event.description));
+    setError('');
+  }, [event]);
+
+  const submit = async () => {
+    if (!title.trim() || !date || (!allDay && (!startTime || !endTime))) return;
+    setSaving(true);
+    setError('');
+    try {
+      const { event: updatedEvent } = await updateCalendarEvent({
+        accountId: event.accountId,
+        calendarId: event.calendarId,
+        eventId: event.id,
+        title,
+        date,
+        startTime,
+        endTime,
+        description,
+        allDay,
+        calendarSummary: event.calendarSummary,
+        color: event.color,
+      });
+      onSaved({
+        ...updatedEvent,
+        calendarSummary: event.calendarSummary,
+        color: event.color,
+      });
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Unable to update event.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-[var(--color-border)] bg-white p-3 shadow-sm">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Icon name="edit" size={13} className="text-[var(--color-accent)]" />
+          <h4 className="text-xs font-semibold">Edit event</h4>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+          title="Cancel edit"
+        >
+          <Icon name="x" size={13} />
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        <input
+          value={title}
+          onChange={(changeEvent) => setTitle(changeEvent.target.value)}
+          placeholder="Title"
+          className="h-9 w-full rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-3 text-xs outline-none focus:border-[var(--color-accent)] focus:bg-white"
+        />
+        <input
+          type="date"
+          value={date}
+          onChange={(changeEvent) => setDate(changeEvent.target.value)}
+          className="h-9 w-full rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs outline-none focus:border-[var(--color-accent)] focus:bg-white"
+        />
+        <label className="flex h-8 items-center gap-2 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-3 text-xs font-medium text-[var(--color-text-secondary)]">
+          <input
+            type="checkbox"
+            checked={allDay}
+            onChange={(changeEvent) => setAllDay(changeEvent.target.checked)}
+            className="h-3.5 w-3.5 accent-[var(--color-accent)]"
+          />
+          All day
+        </label>
+        {!allDay && (
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="time"
+              value={startTime}
+              onChange={(changeEvent) => setStartTime(changeEvent.target.value)}
+              className="h-9 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs outline-none focus:border-[var(--color-accent)] focus:bg-white"
+            />
+            <input
+              type="time"
+              value={endTime}
+              onChange={(changeEvent) => setEndTime(changeEvent.target.value)}
+              className="h-9 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs outline-none focus:border-[var(--color-accent)] focus:bg-white"
+            />
+          </div>
+        )}
+        <textarea
+          value={description}
+          onChange={(changeEvent) => setDescription(changeEvent.target.value)}
+          placeholder="Description optional"
+          className="h-20 w-full resize-none rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-3 py-2 text-xs leading-5 outline-none focus:border-[var(--color-accent)] focus:bg-white"
+        />
+        {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-8 rounded-lg border border-[var(--color-border-subtle)] bg-white text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={saving || !title.trim() || !date}
+            className="h-8 rounded-lg bg-[var(--color-text-primary)] text-xs font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function AddEventForm({ dateKey, accounts, calendarsByAccount, accountFilter, onCreated }: AddEventFormProps) {
@@ -767,6 +948,21 @@ function getCalendarPrivacyRank(calendar: CalendarInfo, account?: CalendarAccoun
   if (email && (id === email || summary === email)) return 1;
   if (/(family|shared|group|public)/i.test(calendar.summary)) return 50;
   return 10;
+}
+
+function getEditableEventDate(event: LuCalendarEvent) {
+  if (event.allDay) return event.start.slice(0, 10);
+  const date = new Date(event.start);
+  if (Number.isNaN(date.getTime())) return event.start.slice(0, 10);
+  return toDateKey(date);
+}
+
+function getEditableEventTime(value: string, fallback: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
 function cleanCalendarDescription(description: string) {

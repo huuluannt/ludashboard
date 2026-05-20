@@ -71,9 +71,32 @@ export async function createCalendarEvent(input: {
   startTime: string;
   endTime: string;
   description: string;
+  allDay?: boolean;
 }) {
   return calendarApi<{ event: LuCalendarEvent }>('/api/calendar/events', {
     method: 'POST',
+    body: JSON.stringify({
+      ...input,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    }),
+  });
+}
+
+export async function updateCalendarEvent(input: {
+  accountId: string;
+  calendarId: string;
+  eventId: string;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  description: string;
+  allDay: boolean;
+  calendarSummary?: string;
+  color?: string;
+}) {
+  return calendarApi<{ event: LuCalendarEvent }>('/api/calendar/events', {
+    method: 'PATCH',
     body: JSON.stringify({
       ...input,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
