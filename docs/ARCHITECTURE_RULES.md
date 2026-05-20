@@ -42,3 +42,11 @@ Future and external modules are meant to be imported dynamically as online ifram
 - No standard browser behaviors like blue default focus rings or text-selection on UI control elements.
 - The interface must respond instantly to clicks (optimistic UI updates).
 - Service workers must be maintained for offline asset caching.
+
+## 9. Vercel API Function Budget Rule
+- LuDashboard must stay deployable on Vercel Hobby. Keep public Serverless Functions under 12.
+- Do not add many standalone public files like `api/module/action.js`.
+- Use one catch-all public dispatcher per provider/module group, then place endpoint logic under `api/_handlers/`.
+- Example: `api/calendar/[...path].js` dispatches to `api/_handlers/calendar/events.js`.
+- Before every deploy, `npm run build` runs `scripts/check-vercel-functions.mjs` and must report 12 or fewer public functions.
+- New native modules can keep growing freely on the frontend. Backend/API features must reuse an existing dispatcher or add at most one carefully justified dispatcher.

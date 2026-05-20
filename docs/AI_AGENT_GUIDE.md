@@ -34,6 +34,8 @@ When instructed to build a new tool:
 When adding features, ask yourself: "If this app has 100 modules installed, will this change cause performance issues?"
 - Only load module code when necessary. (Future iteration will use React.lazy).
 - Keep the `ModuleRegistry` clean.
+- Keep Vercel public API functions under 12. Add backend endpoints under `api/_handlers/` and route through an existing catch-all dispatcher such as `api/calendar/[...path].js`, `api/gmail/[...path].js`, or a single new dispatcher for a new provider group.
+- Never add a separate public Vercel function for every native module action. `npm run build` includes a guard that will fail if the public function budget is exceeded.
 
 ## 6. Preserving PWA / Desktop UX
 - Do not use `<a>` tags for internal navigation. Use the `useTabStore` to open modules.
