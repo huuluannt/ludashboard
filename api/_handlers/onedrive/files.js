@@ -66,7 +66,7 @@ function buildListUrl({ search, parentId, pageSize }) {
   const url = new URL(oneDriveApiUrl(path));
   url.searchParams.set('$top', String(pageSize));
   url.searchParams.set('$select', 'id,name,size,file,folder,package,webUrl,lastModifiedDateTime,createdDateTime,parentReference,photo,image,video');
-  if (!search) url.searchParams.set('$orderby', 'folder,name');
+  if (!search) url.searchParams.set('$orderby', 'name');
   return url;
 }
 
