@@ -15,23 +15,32 @@ export default async function handler(req, res) {
   try {
     const query = getQuery(req);
     const accountId = String(query.get('accountId') || 'all');
+    const sessionId = String(query.get('sessionId') || '');
     const search = String(query.get('q') || '').trim().toLowerCase();
     const pageSize = clampNumber(Number(query.get('pageSize') || 50), 10, 100);
-    const accounts = await resolveGoogleAccounts(APP_ID, user.id, accountId);
+    if (!sessionId) {
+      sendJson(res, 400, { error: 'Select photos with the Google Photos Picker first.' });
+      return;
+    }
+
+    const accounts = await resolveGoogleAccounts(APP_ID, user.id, accountId === 'all' ? 'all' : accountId);
+    const account = accounts[0];
+    if (!account) {
+      sendJson(res, 404, { error: 'Google Photos account was not found.', needsReconnect: true });
+      return;
+    }
     const mediaItems = [];
     const errors = [];
 
-    for (const account of accounts) {
-      try {
-        mediaItems.push(...(await listMediaForAccount(user.id, account, pageSize)));
-      } catch (error) {
-        errors.push({
-          accountId: account.accountId,
-          email: account.email,
-          error: error instanceof Error ? error.message : 'Unable to load Google Photos.',
-          needsReconnect: error instanceof GoogleWorkspaceAuthError,
-        });
-      }
+    try {
+      mediaItems.push(...(await listMediaForAccount(user.id, account, sessionId, pageSize)));
+    } catch (error) {
+      errors.push({
+        accountId: account.accountId,
+        email: account.email,
+        error: error instanceof Error ? error.message : 'Unable to load selected Google Photos.',
+        needsReconnect: error instanceof GoogleWorkspaceAuthError,
+      });
     }
 
     const filtered = search
@@ -48,25 +57,40 @@ export default async function handler(req, res) {
   }
 }
 
-async function listMediaForAccount(ownerId, account, pageSize) {
-  const url = new URL('https://photoslibrary.googleapis.com/v1/mediaItems');
-  url.searchParams.set('pageSize', String(pageSize));
-  const data = await googleWorkspaceFetch(APP_ID, ownerId, account, url.toString());
-  return (data.mediaItems || []).map((item) => normalizeMediaItem(item, account));
+async function listMediaForAccount(ownerId, account, sessionId, pageSize) {
+  const mediaItems = [];
+  let pageToken = '';
+
+  for (let page = 0; page < 5; page += 1) {
+    const url = new URL('https://photospicker.googleapis.com/v1/mediaItems');
+    url.searchParams.set('sessionId', sessionId);
+    url.searchParams.set('pageSize', String(pageSize));
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+    const data = await googleWorkspaceFetch(APP_ID, ownerId, account, url.toString());
+    mediaItems.push(...(data.mediaItems || []).map((item) => normalizeMediaItem(item, account, sessionId)));
+    pageToken = data.nextPageToken || '';
+    if (!pageToken || mediaItems.length >= pageSize) break;
+  }
+
+  return mediaItems.slice(0, pageSize);
 }
 
-function normalizeMediaItem(item, account) {
-  const metadata = item.mediaMetadata || {};
+function normalizeMediaItem(item, account, sessionId) {
+  const mediaFile = item.mediaFile || {};
+  const metadata = mediaFile.mediaFileMetadata || item.mediaMetadata || {};
   return {
     id: item.id || '',
-    filename: item.filename || '',
+    filename: mediaFile.filename || item.filename || '',
     description: item.description || '',
-    baseUrl: item.baseUrl || '',
-    mimeType: item.mimeType || '',
+    baseUrl: mediaFile.baseUrl || item.baseUrl || '',
+    mimeType: mediaFile.mimeType || item.mimeType || '',
     productUrl: item.productUrl || '',
-    creationTime: metadata.creationTime || '',
-    width: metadata.width || '',
-    height: metadata.height || '',
+    creationTime: item.createTime || metadata.creationTime || '',
+    width: metadata.width ? String(metadata.width) : '',
+    height: metadata.height ? String(metadata.height) : '',
+    type: item.type || '',
+    sessionId,
     accountId: account.accountId,
     accountEmail: account.email,
   };

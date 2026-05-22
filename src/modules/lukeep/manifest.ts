@@ -6,7 +6,7 @@ export const manifest: ModuleManifest = {
   icon: 'sticky-note',
   version: '1.0.0',
   category: 'Google',
-  description: 'Native Google Keep note reader',
+  description: 'Google Keep API access status',
   offline: false,
   permissions: ['keep', 'network'],
 };

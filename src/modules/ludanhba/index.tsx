@@ -7,6 +7,8 @@ interface ContactPerson {
   phoneNumbers: string[];
   photoUrl: string;
   organization: string;
+  source: string;
+  sourceLabel: string;
   accountId: string;
   accountEmail: string;
 }
@@ -41,6 +43,7 @@ export default function LuDanhbaModule() {
             <p className="mt-1 truncate text-[11px] text-[var(--color-text-tertiary)]">
               {person.emailAddresses[0] || person.phoneNumbers[0] || person.accountEmail}
             </p>
+            <p className="mt-0.5 truncate text-[10px] font-medium text-[var(--color-text-tertiary)]">{person.sourceLabel}</p>
           </div>
         </div>
       )}
@@ -61,6 +64,7 @@ export default function LuDanhbaModule() {
           </div>
           <InfoList title="Emails" items={person.emailAddresses} />
           <InfoList title="Phones" items={person.phoneNumbers} />
+          <InfoList title="Source" items={[person.sourceLabel || 'Contacts']} />
           <InfoList title="Account" items={[person.accountEmail]} />
         </div>
       )}

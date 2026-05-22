@@ -6,7 +6,7 @@ export const manifest: ModuleManifest = {
   icon: 'images',
   version: '1.0.0',
   category: 'Google',
-  description: 'Native Google Photos viewer',
+  description: 'Google Photos Picker viewer',
   offline: false,
   permissions: ['photos', 'network'],
 };

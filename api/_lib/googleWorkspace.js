@@ -19,7 +19,15 @@ export const GOOGLE_WORKSPACE_APPS = {
     redirectEnv: 'GOOGLE_CLASSROOM_REDIRECT_URI',
     sharedCallbackPath: '/api/gmail/callback',
     sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
-    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/classroom.courses.readonly'],
+    scopes: [
+      'openid',
+      'email',
+      'https://www.googleapis.com/auth/classroom.courses.readonly',
+      'https://www.googleapis.com/auth/classroom.announcements.readonly',
+      'https://www.googleapis.com/auth/classroom.coursework.me.readonly',
+      'https://www.googleapis.com/auth/classroom.coursework.students.readonly',
+      'https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly',
+    ],
   },
   photos: {
     appName: 'LuAnh',
@@ -27,7 +35,7 @@ export const GOOGLE_WORKSPACE_APPS = {
     redirectEnv: 'GOOGLE_PHOTOS_REDIRECT_URI',
     sharedCallbackPath: '/api/gmail/callback',
     sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
-    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/photoslibrary.readonly'],
+    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/photospicker.mediaitems.readonly'],
   },
   keep: {
     appName: 'LuKeep',
@@ -35,7 +43,7 @@ export const GOOGLE_WORKSPACE_APPS = {
     redirectEnv: 'GOOGLE_KEEP_REDIRECT_URI',
     sharedCallbackPath: '/api/gmail/callback',
     sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
-    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/keep.readonly'],
+    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/keep'],
   },
   contacts: {
     appName: 'LuDanhba',
@@ -43,7 +51,12 @@ export const GOOGLE_WORKSPACE_APPS = {
     redirectEnv: 'GOOGLE_CONTACTS_REDIRECT_URI',
     sharedCallbackPath: '/api/gmail/callback',
     sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
-    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/contacts.readonly'],
+    scopes: [
+      'openid',
+      'email',
+      'https://www.googleapis.com/auth/contacts.readonly',
+      'https://www.googleapis.com/auth/contacts.other.readonly',
+    ],
   },
 };
 
@@ -142,12 +155,15 @@ export async function refreshGoogleWorkspaceAccessToken(appId, ownerId, account)
 
 export async function getUsableGoogleWorkspaceAccessToken(appId, ownerId, account) {
   if (!account) throw new GoogleWorkspaceAuthError('Google account was not found.', 404);
-  if (account.needsReconnect) throw new GoogleWorkspaceAuthError('Reconnect account', 401);
-  if (account.expiresAt && account.expiresAt - Date.now() > 60_000) {
+  if (account.expiresAt && account.expiresAt - Date.now() > 60_000 && account.accessToken) {
     return account.accessToken;
   }
-  const refreshed = await refreshGoogleWorkspaceAccessToken(appId, ownerId, account);
-  return refreshed.accessToken;
+  if (account.refreshToken) {
+    const refreshed = await refreshGoogleWorkspaceAccessToken(appId, ownerId, account);
+    return refreshed.accessToken;
+  }
+  if (account.needsReconnect) throw new GoogleWorkspaceAuthError('Reconnect account', 401);
+  throw new GoogleWorkspaceAuthError('Reconnect account', 401);
 }
 
 export async function googleWorkspaceFetch(appId, ownerId, account, url, options = {}) {
@@ -164,13 +180,25 @@ export async function googleWorkspaceFetch(appId, ownerId, account, url, options
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (response.status === 401 || response.status === 403) {
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { error: { message: text || `${getAppConfig(appId).appName} Google API request failed.` } };
+  }
+  if (response.status === 401) {
     await updateGoogleAccount(appId, ownerId, account.accountId, { needsReconnect: true });
     throw new GoogleWorkspaceAuthError('Reconnect account', 401);
   }
+  if (response.status === 403 && isInsufficientScopeError(data)) {
+    await updateGoogleAccount(appId, ownerId, account.accountId, { needsReconnect: true });
+    throw new GoogleWorkspaceAuthError('Reconnect account to grant the latest Google API scopes.', 403);
+  }
   if (!response.ok) {
     throw new Error(data?.error?.message || `${getAppConfig(appId).appName} Google API request failed.`);
+  }
+  if (account.needsReconnect) {
+    await updateGoogleAccount(appId, ownerId, account.accountId, { needsReconnect: false });
   }
   return data;
 }
@@ -183,6 +211,18 @@ export function decodeJwtPayload(jwt) {
   } catch {
     return {};
   }
+}
+
+function isInsufficientScopeError(data) {
+  const message = String(data?.error?.message || '').toLowerCase();
+  const status = String(data?.error?.status || '').toLowerCase();
+  const details = JSON.stringify(data?.error?.details || []).toLowerCase();
+  return (
+    message.includes('insufficient authentication scopes') ||
+    message.includes('insufficient oauth scope') ||
+    status.includes('access_token_scope_insufficient') ||
+    details.includes('access_token_scope_insufficient')
+  );
 }
 
 export function sendGoogleCallbackHtml(res, appId, success, message) {

@@ -6,7 +6,7 @@ export const manifest: ModuleManifest = {
   icon: 'notebook-pen',
   version: '1.0.0',
   category: 'Google',
-  description: 'Native Google Classroom course browser',
+  description: 'Google Classroom courses and posts',
   offline: false,
   permissions: ['classroom', 'network'],
 };
