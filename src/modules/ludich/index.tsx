@@ -33,7 +33,6 @@ export default function LuDichModule() {
   const [translating, setTranslating] = useState(false);
   const [copiedTarget, setCopiedTarget] = useState<'source' | 'translation' | null>(null);
   const [speakingTarget, setSpeakingTarget] = useState<'source' | 'translation' | null>(null);
-  const [showGoogleTranslateFrame, setShowGoogleTranslateFrame] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -125,22 +124,16 @@ export default function LuDichModule() {
         <div className="flex min-w-[210px] flex-1 items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowGoogleTranslateFrame((current) => !current)}
-            title={showGoogleTranslateFrame ? 'Return to LuDich API view' : 'Open Google Translate here'}
-            aria-label="Open Google Translate here"
-            className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-colors ${
-              showGoogleTranslateFrame
-                ? 'border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
-                : 'border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)] hover:bg-white'
-            }`}
+            onClick={() => window.open(GOOGLE_TRANSLATE_URL, '_blank', 'noopener,noreferrer')}
+            title="Open Google Translate"
+            aria-label="Open Google Translate"
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)] transition-colors hover:bg-white"
           >
             <Icon name="languages" size={17} />
           </button>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold">LuDich</h2>
-            <p className="truncate text-[11px] text-[var(--color-text-tertiary)]">
-              {showGoogleTranslateFrame ? 'Google Translate iframe' : 'Google Translate API'}
-            </p>
+            <p className="truncate text-[11px] text-[var(--color-text-tertiary)]">Google Translate API</p>
           </div>
         </div>
 
@@ -172,15 +165,6 @@ export default function LuDichModule() {
         </div>
       )}
 
-      {showGoogleTranslateFrame ? (
-        <main className="min-h-0 flex-1 bg-[var(--color-surface-muted)] p-3">
-          <iframe
-            title="Google Translate"
-            src={GOOGLE_TRANSLATE_URL}
-            className="h-full w-full rounded-2xl border border-[var(--color-border)] bg-white shadow-sm"
-          />
-        </main>
-      ) : (
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 bg-[var(--color-surface-muted)] p-3 lg:grid-cols-2">
         <section className="flex min-h-[280px] flex-col rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
           <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-4 py-3 text-xs font-semibold text-[var(--color-text-secondary)]">
@@ -189,9 +173,9 @@ export default function LuDichModule() {
               <HeaderIconButton
                 active={speakingTarget === 'source'}
                 disabled={!sourceText}
-                icon="speaker"
+                icon="volume-2"
                 label="Read source text"
-                onClick={() => speakText('source', sourceText, sourceLanguage === 'auto' ? detectedLanguage : sourceLanguage)}
+                onClick={() => speakText('source', sourceText, resolveSpeechSourceLanguage(sourceLanguage, detectedLanguage, sourceText))}
               />
               <button
                 type="button"
@@ -211,6 +195,7 @@ export default function LuDichModule() {
                 if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
                 event.preventDefault();
                 void translate();
+                if (isTouchInputDevice()) event.currentTarget.blur();
               }}
               className="h-full w-full resize-none rounded-b-2xl bg-transparent p-4 pr-12 text-sm leading-7 outline-none placeholder:text-[var(--color-text-tertiary)]"
               placeholder="Enter text to translate..."
@@ -231,7 +216,7 @@ export default function LuDichModule() {
               <HeaderIconButton
                 active={speakingTarget === 'translation'}
                 disabled={!translatedText}
-                icon="speaker"
+                icon="volume-2"
                 label="Read translation"
                 onClick={() => speakText('translation', translatedText, resolveSpeechTargetLanguage(targetLanguage, resolvedTargetLanguage, detectedLanguage))}
               />
@@ -256,7 +241,6 @@ export default function LuDichModule() {
           </div>
         </section>
       </main>
-      )}
     </div>
   );
 }
@@ -281,11 +265,11 @@ function HeaderIconButton({
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={`flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-white transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-white transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
         active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
       }`}
     >
-      <Icon name={icon} size={13} />
+      <Icon name={icon} size={18} />
     </button>
   );
 }
@@ -351,4 +335,18 @@ function resolveSpeechTargetLanguage(targetLanguage: string, resolvedTargetLangu
   if (resolvedTargetLanguage) return resolvedTargetLanguage;
   if (targetLanguage !== 'auto-pair') return targetLanguage;
   return String(detectedLanguage || '').toLowerCase().startsWith('vi') ? 'en' : 'vi';
+}
+
+function resolveSpeechSourceLanguage(sourceLanguage: string, detectedLanguage: string, text: string) {
+  if (sourceLanguage !== 'auto') return sourceLanguage;
+  return detectedLanguage || guessVietnameseOrEnglish(text);
+}
+
+function guessVietnameseOrEnglish(text: string) {
+  const normalized = text.normalize('NFD');
+  return /[\u0300-\u036f]/.test(normalized) || /[\u0111\u0110]/.test(text) ? 'vi' : 'en';
+}
+
+function isTouchInputDevice() {
+  return navigator.maxTouchPoints > 0 || window.matchMedia?.('(pointer: coarse)').matches;
 }

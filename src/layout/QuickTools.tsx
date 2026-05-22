@@ -31,6 +31,9 @@ export default function QuickTools() {
   const [translatorModel, setTranslatorModel] = useState('');
   const [translatorProvider, setTranslatorProvider] = useState<TranslatorProvider>('google');
   const [translatorCopied, setTranslatorCopied] = useState<'source' | 'translation' | null>(null);
+  const [translatorDetectedLanguage, setTranslatorDetectedLanguage] = useState('');
+  const [translatorTargetLanguage, setTranslatorTargetLanguage] = useState('');
+  const [translatorSpeakingTarget, setTranslatorSpeakingTarget] = useState<'source' | 'translation' | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const translatorInputRef = useRef<HTMLTextAreaElement>(null);
@@ -76,7 +79,10 @@ export default function QuickTools() {
   }, [openTool]);
 
   useEffect(() => {
-    return () => translatorAbortRef.current?.abort();
+    return () => {
+      translatorAbortRef.current?.abort();
+      window.speechSynthesis?.cancel();
+    };
   }, []);
 
   useEffect(() => {
@@ -141,6 +147,10 @@ export default function QuickTools() {
     setIsTranslating(true);
     setTranslatorStatus('Translating...');
     setTranslation('');
+    setTranslatorDetectedLanguage('');
+    setTranslatorTargetLanguage('');
+    setTranslatorSpeakingTarget(null);
+    window.speechSynthesis?.cancel();
 
     try {
       const response = translatorProvider === 'google'
@@ -156,9 +166,17 @@ export default function QuickTools() {
       if (!response.ok) throw new Error(data?.error || 'Translation failed.');
 
       setTranslation(String(data.translation || data.translatedText || '').trim());
+      const detectedLanguage = translatorProvider === 'google'
+        ? String(data.detectedSourceLanguage || '')
+        : guessVietnameseOrEnglish(text);
+      const targetLanguage = translatorProvider === 'google'
+        ? String(data.targetLanguage || '')
+        : getOppositePairedLanguage(detectedLanguage);
+      setTranslatorDetectedLanguage(detectedLanguage);
+      setTranslatorTargetLanguage(targetLanguage);
       setTranslatorModel(
         translatorProvider === 'google'
-          ? formatGoogleTranslatorMeta(String(data.detectedSourceLanguage || ''), String(data.targetLanguage || ''))
+          ? formatGoogleTranslatorMeta(detectedLanguage, targetLanguage)
           : String(data.model || 'Groq'),
       );
       setTranslatorStatus('');
@@ -180,7 +198,11 @@ export default function QuickTools() {
     setTranslation('');
     setTranslatorStatus('');
     setTranslatorModel('');
+    setTranslatorDetectedLanguage('');
+    setTranslatorTargetLanguage('');
+    setTranslatorSpeakingTarget(null);
     setIsTranslating(false);
+    window.speechSynthesis?.cancel();
     window.setTimeout(() => translatorInputRef.current?.focus(), 0);
   };
 
@@ -191,7 +213,11 @@ export default function QuickTools() {
     setTranslation('');
     setTranslatorStatus('');
     setTranslatorModel('');
+    setTranslatorDetectedLanguage('');
+    setTranslatorTargetLanguage('');
+    setTranslatorSpeakingTarget(null);
     setIsTranslating(false);
+    window.speechSynthesis?.cancel();
     window.setTimeout(() => translatorInputRef.current?.focus(), 0);
   };
 
@@ -202,6 +228,19 @@ export default function QuickTools() {
     window.setTimeout(() => {
       setTranslatorCopied((current) => (current === kind ? null : current));
     }, 1100);
+  };
+
+  const speakTranslatorText = (kind: 'source' | 'translation', value: string, languageCode: string) => {
+    const text = value.trim();
+    if (!text || !('speechSynthesis' in window)) return;
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = normalizeSpeechLanguage(languageCode);
+    utterance.onend = () => setTranslatorSpeakingTarget((current) => (current === kind ? null : current));
+    utterance.onerror = () => setTranslatorSpeakingTarget((current) => (current === kind ? null : current));
+    setTranslatorSpeakingTarget(kind);
+    window.speechSynthesis.speak(utterance);
   };
 
   const setTranslatorOpen = () => setOpenTool((tool) => (tool === 'translator' ? null : 'translator'));
@@ -264,8 +303,14 @@ export default function QuickTools() {
                 }
                 if (event.key === 'Escape') setOpenTool(null);
               }}
-              className="min-h-24 w-full resize-none rounded-lg border border-black/35 bg-[var(--color-surface-subtle)] px-3 py-2 pr-9 text-sm leading-5 text-[var(--color-text-primary)] outline-none transition-colors placeholder:text-[var(--color-text-tertiary)] focus:border-black focus:bg-white"
+              className="min-h-24 w-full resize-none rounded-lg border border-black/35 bg-[var(--color-surface-subtle)] px-3 py-2 pr-16 text-sm leading-5 text-[var(--color-text-primary)] outline-none transition-colors placeholder:text-[var(--color-text-tertiary)] focus:border-black focus:bg-white"
               placeholder="Type Vietnamese or English, then press Enter..."
+            />
+            <SpeakButton
+              active={translatorSpeakingTarget === 'source'}
+              disabled={!translatorText}
+              label="Read source text"
+              onClick={() => speakTranslatorText('source', translatorText, translatorDetectedLanguage || guessVietnameseOrEnglish(translatorText))}
             />
             <CopyButton
               copied={translatorCopied === 'source'}
@@ -275,7 +320,16 @@ export default function QuickTools() {
             />
           </div>
 
-          <div className="relative mt-2 min-h-24 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-2 pr-9">
+          <div className="relative mt-2 min-h-24 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-2 pr-16">
+            <SpeakButton
+              active={translatorSpeakingTarget === 'translation'}
+              disabled={!translation}
+              label="Read translation"
+              onClick={() => {
+                const sourceLanguage = translatorDetectedLanguage || guessVietnameseOrEnglish(translatorText);
+                speakTranslatorText('translation', translation, translatorTargetLanguage || getOppositePairedLanguage(sourceLanguage));
+              }}
+            />
             <CopyButton
               copied={translatorCopied === 'translation'}
               disabled={!translation}
@@ -426,6 +480,33 @@ function QuickToolButton({ active, icon, label, textIcon, onClick }: QuickToolBu
   );
 }
 
+function SpeakButton({
+  active,
+  disabled,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={`absolute right-10 top-2 flex h-7 w-7 items-center justify-center rounded-md border border-[var(--color-border-subtle)] bg-white/90 shadow-sm transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-0 ${
+        active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
+      }`}
+    >
+      <Icon name="volume-2" size={16} />
+    </button>
+  );
+}
+
 function CopyButton({
   copied,
   disabled,
@@ -496,6 +577,28 @@ function formatGoogleTranslatorMeta(detectedLanguage: string, targetLanguage: st
   const source = detectedLanguage || 'auto';
   const target = targetLanguage || 'auto';
   return `Google Dịch ${source} -> ${target}`;
+}
+
+function normalizeSpeechLanguage(languageCode: string) {
+  const code = String(languageCode || '').toLowerCase();
+  if (code.startsWith('vi')) return 'vi-VN';
+  if (code.startsWith('en')) return 'en-US';
+  if (code.startsWith('ja')) return 'ja-JP';
+  if (code.startsWith('ko')) return 'ko-KR';
+  if (code.startsWith('zh')) return 'zh-CN';
+  if (code.startsWith('fr')) return 'fr-FR';
+  if (code.startsWith('de')) return 'de-DE';
+  if (code.startsWith('es')) return 'es-ES';
+  return 'en-US';
+}
+
+function guessVietnameseOrEnglish(text: string) {
+  const normalized = text.normalize('NFD');
+  return /[\u0300-\u036f]/.test(normalized) || /[\u0111\u0110]/.test(text) ? 'vi' : 'en';
+}
+
+function getOppositePairedLanguage(languageCode: string) {
+  return String(languageCode || '').toLowerCase().startsWith('vi') ? 'en' : 'vi';
 }
 
 function sanitizeMoney(value: string) {
