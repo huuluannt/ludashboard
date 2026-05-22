@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getAuth } from 'firebase/auth';
 import Icon from '@/components/Icon';
+import { app } from '@/firebase/config';
 import { useFixedPopoverPosition } from './useFixedPopoverPosition';
 
 const GOOGLE_URL = 'https://www.google.com/';
@@ -8,6 +10,7 @@ const RATE_CACHE_KEY = 'ludashboard_usd_vnd_rate';
 const RATE_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 
 type QuickTool = 'translator' | 'money' | 'calculator';
+type TranslatorProvider = 'google' | 'groq';
 
 interface RateCache {
   rate: number;
@@ -26,6 +29,7 @@ export default function QuickTools() {
   const [translation, setTranslation] = useState('');
   const [translatorStatus, setTranslatorStatus] = useState('');
   const [translatorModel, setTranslatorModel] = useState('');
+  const [translatorProvider, setTranslatorProvider] = useState<TranslatorProvider>('google');
   const [isTranslating, setIsTranslating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const translatorInputRef = useRef<HTMLTextAreaElement>(null);
@@ -138,18 +142,24 @@ export default function QuickTools() {
     setTranslation('');
 
     try {
-      const response = await fetch('/api/ai/groq/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-        signal: controller.signal,
-      });
+      const response = translatorProvider === 'google'
+        ? await fetchGoogleTranslation(text, controller.signal)
+        : await fetch('/api/ai/groq/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+          signal: controller.signal,
+        });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || 'Translation failed.');
 
-      setTranslation(String(data.translation || '').trim());
-      setTranslatorModel(String(data.model || 'Groq'));
+      setTranslation(String(data.translation || data.translatedText || '').trim());
+      setTranslatorModel(
+        translatorProvider === 'google'
+          ? formatGoogleTranslatorMeta(String(data.detectedSourceLanguage || ''), String(data.targetLanguage || ''))
+          : String(data.model || 'Groq'),
+      );
       setTranslatorStatus('');
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -160,12 +170,23 @@ export default function QuickTools() {
       }
       setIsTranslating(false);
     }
-  }, [isTranslating, translatorText]);
+  }, [isTranslating, translatorProvider, translatorText]);
 
   const clearTranslator = () => {
     translatorAbortRef.current?.abort();
     translatorAbortRef.current = null;
     setTranslatorText('');
+    setTranslation('');
+    setTranslatorStatus('');
+    setTranslatorModel('');
+    setIsTranslating(false);
+    window.setTimeout(() => translatorInputRef.current?.focus(), 0);
+  };
+
+  const changeTranslatorProvider = (provider: TranslatorProvider) => {
+    translatorAbortRef.current?.abort();
+    translatorAbortRef.current = null;
+    setTranslatorProvider(provider);
     setTranslation('');
     setTranslatorStatus('');
     setTranslatorModel('');
@@ -199,7 +220,15 @@ export default function QuickTools() {
               <Icon name="languages" size={15} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-[var(--color-text-primary)]">Translator by Groq AI</p>
+              <select
+                value={translatorProvider}
+                onChange={(event) => changeTranslatorProvider(event.currentTarget.value as TranslatorProvider)}
+                className="h-6 max-w-full rounded-md border border-transparent bg-transparent px-0 text-xs font-semibold text-[var(--color-text-primary)] outline-none transition-colors hover:border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-subtle)] focus:border-[var(--color-accent)] focus:bg-white"
+                aria-label="Translator engine"
+              >
+                <option value="google">Google Dịch</option>
+                <option value="groq">Groq AI</option>
+              </select>
               <p className="truncate text-[10px] text-[var(--color-text-tertiary)]">Vietnamese to/from English</p>
             </div>
             <button
@@ -235,7 +264,13 @@ export default function QuickTools() {
           </div>
 
           <div className="mt-2 flex items-center justify-between gap-2 text-[9px] text-[var(--color-text-tertiary)]">
-            <span>{translatorStatus || (translatorModel ? `Model: ${translatorModel}` : 'Enter to translate, Shift+Enter for new line')}</span>
+            <span>
+              {translatorStatus || (
+                translatorModel
+                  ? `${translatorProvider === 'google' ? 'Engine' : 'Model'}: ${translatorModel}`
+                  : 'Enter to translate, Shift+Enter for new line'
+              )}
+            </span>
             <span>{translatorText.length.toLocaleString()} / 3,000</span>
           </div>
         </div>
@@ -365,6 +400,34 @@ function QuickToolButton({ active, icon, label, textIcon, onClick }: QuickToolBu
       </button>
     </div>
   );
+}
+
+async function fetchGoogleTranslation(text: string, signal: AbortSignal) {
+  const user = getAuth(app).currentUser;
+  if (!user) {
+    throw new Error('Sign in to LuDashboard before using Google Dịch.');
+  }
+
+  const token = await user.getIdToken();
+  return fetch('/api/translate/translate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      q: text,
+      source: '',
+      target: 'auto-pair',
+    }),
+    signal,
+  });
+}
+
+function formatGoogleTranslatorMeta(detectedLanguage: string, targetLanguage: string) {
+  const source = detectedLanguage || 'auto';
+  const target = targetLanguage || 'auto';
+  return `Google Dịch ${source} -> ${target}`;
 }
 
 function sanitizeMoney(value: string) {

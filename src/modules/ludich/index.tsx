@@ -15,12 +15,20 @@ const LANGUAGES = [
   { code: 'es', label: 'Spanish' },
 ];
 
+const TARGET_LANGUAGES = [
+  { code: 'auto-pair', label: 'Vietnamese <-> English' },
+  ...LANGUAGES.filter((language) => language.code !== 'auto'),
+];
+
+const languageLabelByCode = new Map(TARGET_LANGUAGES.map((language) => [language.code, language.label]));
+
 export default function LuDichModule() {
   const [sourceText, setSourceText] = useState('');
   const [translatedText, setTranslatedText] = useState('');
   const [sourceLanguage, setSourceLanguage] = useState('auto');
-  const [targetLanguage, setTargetLanguage] = useState('vi');
+  const [targetLanguage, setTargetLanguage] = useState('auto-pair');
   const [detectedLanguage, setDetectedLanguage] = useState('');
+  const [resolvedTargetLanguage, setResolvedTargetLanguage] = useState('');
   const [translating, setTranslating] = useState(false);
   const [error, setError] = useState('');
 
@@ -53,6 +61,7 @@ export default function LuDichModule() {
       if (!response.ok) throw new Error(data?.error || 'LuDich request failed.');
       setTranslatedText(String(data.translatedText || ''));
       setDetectedLanguage(String(data.detectedSourceLanguage || ''));
+      setResolvedTargetLanguage(String(data.targetLanguage || ''));
     } catch (translateError) {
       setError(translateError instanceof Error ? translateError.message : 'Unable to translate text.');
     } finally {
@@ -61,11 +70,12 @@ export default function LuDichModule() {
   };
 
   const swapLanguages = () => {
-    if (sourceLanguage === 'auto') return;
+    if (sourceLanguage === 'auto' || targetLanguage === 'auto-pair') return;
     setSourceLanguage(targetLanguage);
     setTargetLanguage(sourceLanguage);
     setSourceText(translatedText);
     setTranslatedText(sourceText);
+    setResolvedTargetLanguage(sourceLanguage);
   };
 
   return (
@@ -87,12 +97,12 @@ export default function LuDichModule() {
           ))}
         </select>
 
-        <button type="button" onClick={swapLanguages} disabled={sourceLanguage === 'auto'} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-accent)] disabled:opacity-40">
+        <button type="button" onClick={swapLanguages} disabled={sourceLanguage === 'auto' || targetLanguage === 'auto-pair'} className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-accent)] disabled:opacity-40">
           <Icon name="rotate-cw" size={14} />
         </button>
 
         <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)} className="h-8 min-w-[140px] rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs font-medium outline-none focus:border-[var(--color-accent)] focus:bg-white">
-          {LANGUAGES.filter((language) => language.code !== 'auto').map((language) => (
+          {TARGET_LANGUAGES.map((language) => (
             <option key={language.code} value={language.code}>{language.label}</option>
           ))}
         </select>
@@ -115,6 +125,11 @@ export default function LuDichModule() {
           <textarea
             value={sourceText}
             onChange={(event) => setSourceText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              void translate();
+            }}
             className="min-h-0 flex-1 resize-none rounded-b-2xl bg-transparent p-4 text-sm leading-7 outline-none placeholder:text-[var(--color-text-tertiary)]"
             placeholder="Enter text to translate..."
           />
@@ -123,7 +138,12 @@ export default function LuDichModule() {
         <section className="flex min-h-[280px] flex-col rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-3 text-xs font-semibold text-[var(--color-text-secondary)]">
             <span>Translation</span>
-            {detectedLanguage && <span className="text-[10px] text-[var(--color-text-tertiary)]">Detected: {detectedLanguage}</span>}
+            {(detectedLanguage || resolvedTargetLanguage) && (
+              <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                {detectedLanguage ? `Detected: ${detectedLanguage}` : ''}
+                {resolvedTargetLanguage ? ` -> ${languageLabelByCode.get(resolvedTargetLanguage) || resolvedTargetLanguage}` : ''}
+              </span>
+            )}
           </div>
           <div className="min-h-0 flex-1 whitespace-pre-wrap p-4 text-sm leading-7">
             {translatedText || <span className="text-[var(--color-text-tertiary)]">Translation will appear here.</span>}
