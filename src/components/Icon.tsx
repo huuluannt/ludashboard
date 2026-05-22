@@ -392,6 +392,7 @@ Object.assign(iconMap, {
   lightning: Zap,
   rna: DnaOff,
   trash: Trash2,
+  'volume-2': Volume2,
 });
 
 interface IconProps extends LucideProps {

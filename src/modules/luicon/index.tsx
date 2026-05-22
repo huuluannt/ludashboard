@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { CreatePaletteMode, FillStyle, ImageTracer, InterpolationMode, TrimMode } from '@image-tracer-ts/core';
 import Icon from '@/components/Icon';
 import { saveCustomIconToLibrary, svgToDataUrl } from '@/lib/customIconLibrary';
 
@@ -12,7 +13,8 @@ interface SourceAsset {
 }
 
 const DEFAULT_ICON_NAME = 'custom-icon';
-const CANVAS_SIZE = 64;
+const TRACE_CANVAS_SIZE = 256;
+const TRACE_PADDING = 24;
 
 export default function LuIconModule() {
   const [sourceAsset, setSourceAsset] = useState<SourceAsset>({ kind: 'empty', name: '', previewUrl: '' });
@@ -94,10 +96,10 @@ export default function LuIconModule() {
 
     try {
       const nextSvg = sourceAsset.kind === 'svg'
-        ? sanitizeSvgToLineIcon(sourceAsset.svgText || '')
-        : await vectorizeBitmapToLineSvg(sourceAsset.previewUrl);
+        ? sanitizeSvgToIcon(sourceAsset.svgText || '')
+        : await vectorizeBitmapToIconSvg(sourceAsset.previewUrl);
       setConvertedSvg(nextSvg);
-      setStatus('Converted to compact black SVG line icon.');
+      setStatus('Converted to clean SVG vector icon with a free local tracer.');
     } catch (convertError) {
       setError(convertError instanceof Error ? convertError.message : 'Could not convert this asset.');
     }
@@ -206,7 +208,7 @@ export default function LuIconModule() {
         </section>
 
         <section className="flex min-h-[260px] flex-col rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
-          <PanelTitle title="Converted" meta={convertedSvg ? 'SVG line preview' : 'Waiting for convert'} />
+          <PanelTitle title="Converted" meta={convertedSvg ? 'SVG vector preview' : 'Waiting for convert'} />
           <div className="flex min-h-0 flex-1 items-center justify-center p-4">
             {convertedSvg ? (
               <div className="grid w-full max-w-sm grid-cols-2 gap-3">
@@ -278,7 +280,7 @@ function PreviewSwatch({ label, svg, sizeClass, iconSize }: { label: string; svg
   );
 }
 
-function sanitizeSvgToLineIcon(svgText: string) {
+function sanitizeSvgToIcon(svgText: string) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(svgText, 'image/svg+xml');
   const parseError = doc.querySelector('parsererror');
@@ -295,11 +297,17 @@ function sanitizeSvgToLineIcon(svgText: string) {
     });
 
     if (node instanceof SVGElement) {
-      node.setAttribute('fill', 'none');
-      node.setAttribute('stroke', 'currentColor');
-      node.setAttribute('stroke-width', node.getAttribute('stroke-width') || '2');
-      node.setAttribute('stroke-linecap', 'round');
-      node.setAttribute('stroke-linejoin', 'round');
+      const fill = node.getAttribute('fill');
+      const stroke = node.getAttribute('stroke');
+      if (fill && fill !== 'none') node.setAttribute('fill', 'currentColor');
+      if (stroke && stroke !== 'none') {
+        node.setAttribute('stroke', 'currentColor');
+        node.setAttribute('stroke-linecap', node.getAttribute('stroke-linecap') || 'round');
+        node.setAttribute('stroke-linejoin', node.getAttribute('stroke-linejoin') || 'round');
+      }
+      if (!fill && !stroke && isRenderableSvgElement(node)) {
+        node.setAttribute('fill', 'currentColor');
+      }
       node.removeAttribute('class');
       node.removeAttribute('style');
     }
@@ -310,58 +318,145 @@ function sanitizeSvgToLineIcon(svgText: string) {
   return wrapSvg(content, viewBox);
 }
 
-async function vectorizeBitmapToLineSvg(sourceUrl: string) {
+async function vectorizeBitmapToIconSvg(sourceUrl: string) {
   const image = await loadImage(sourceUrl);
   const canvas = document.createElement('canvas');
-  canvas.width = CANVAS_SIZE;
-  canvas.height = CANVAS_SIZE;
+  canvas.width = TRACE_CANVAS_SIZE;
+  canvas.height = TRACE_CANVAS_SIZE;
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) throw new Error('Canvas is not available.');
 
-  context.fillStyle = '#fff';
-  context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  const scale = Math.min((CANVAS_SIZE - 10) / image.width, (CANVAS_SIZE - 10) / image.height);
+  context.clearRect(0, 0, TRACE_CANVAS_SIZE, TRACE_CANVAS_SIZE);
+  const scale = Math.min((TRACE_CANVAS_SIZE - TRACE_PADDING * 2) / image.width, (TRACE_CANVAS_SIZE - TRACE_PADDING * 2) / image.height);
   const width = Math.max(1, Math.round(image.width * scale));
   const height = Math.max(1, Math.round(image.height * scale));
-  const x = Math.round((CANVAS_SIZE - width) / 2);
-  const y = Math.round((CANVAS_SIZE - height) / 2);
+  const x = Math.round((TRACE_CANVAS_SIZE - width) / 2);
+  const y = Math.round((TRACE_CANVAS_SIZE - height) / 2);
   context.drawImage(image, x, y, width, height);
 
-  const imageData = context.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  const gray = new Uint8ClampedArray(CANVAS_SIZE * CANVAS_SIZE);
-  for (let index = 0; index < gray.length; index += 1) {
+  const imageData = context.getImageData(0, 0, TRACE_CANVAS_SIZE, TRACE_CANVAS_SIZE);
+  const coverage = new Uint8ClampedArray(TRACE_CANVAS_SIZE * TRACE_CANVAS_SIZE);
+  for (let index = 0; index < coverage.length; index += 1) {
     const dataIndex = index * 4;
-    const alpha = imageData.data[dataIndex + 3] / 255;
+    const alpha = imageData.data[dataIndex + 3];
     const red = imageData.data[dataIndex];
     const green = imageData.data[dataIndex + 1];
     const blue = imageData.data[dataIndex + 2];
-    gray[index] = Math.round((255 - alpha * 255) + alpha * (0.299 * red + 0.587 * green + 0.114 * blue));
+    const luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
+    coverage[index] = Math.round((alpha * (255 - luminance)) / 255);
   }
 
-  const edgeRows: string[] = [];
-  for (let row = 1; row < CANVAS_SIZE - 1; row += 1) {
-    let start = -1;
-    for (let col = 1; col < CANVAS_SIZE - 1; col += 1) {
-      const center = gray[row * CANVAS_SIZE + col];
-      const right = gray[row * CANVAS_SIZE + col + 1];
-      const down = gray[(row + 1) * CANVAS_SIZE + col];
-      const edge = Math.abs(center - right) + Math.abs(center - down) > 46 && center < 248;
-      if (edge && start < 0) start = col;
-      if ((!edge || col === CANVAS_SIZE - 2) && start >= 0) {
-        const end = edge ? col : col - 1;
-        if (end - start >= 1) edgeRows.push(`M${start} ${row}H${end}`);
-        start = -1;
-      }
-    }
+  const threshold = Math.max(22, Math.min(180, computeOtsuThreshold(coverage)));
+  for (let index = 0; index < coverage.length; index += 1) {
+    const dataIndex = index * 4;
+    const foreground = coverage[index] >= threshold;
+    imageData.data[dataIndex] = foreground ? 0 : 255;
+    imageData.data[dataIndex + 1] = foreground ? 0 : 255;
+    imageData.data[dataIndex + 2] = foreground ? 0 : 255;
+    imageData.data[dataIndex + 3] = foreground ? 255 : 0;
   }
 
-  if (edgeRows.length === 0) throw new Error('Could not find enough edges. Try a simpler logo with stronger contrast.');
-  const maxRows = edgeRows.slice(0, 520);
-  return wrapSvg(`<path d="${maxRows.join(' ')}" />`, `0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`);
+  const tracedSvg = new ImageTracer({
+    colorSamplingMode: CreatePaletteMode.PALETTE,
+    palette: [
+      { r: 0, g: 0, b: 0, a: 255 },
+      { r: 255, g: 255, b: 255, a: 0 },
+    ],
+    numberOfColors: 2,
+    colorClusteringCycles: 1,
+    fillStyle: FillStyle.FILL,
+    interpolation: InterpolationMode.INTERPOLATE,
+    enhanceRightAngles: false,
+    lineErrorMargin: 1,
+    curveErrorMargin: 1.4,
+    minShapeOutline: 8,
+    lineFilter: true,
+    decimalPlaces: 1,
+    trim: TrimMode.KEEP_RATIO,
+    viewBox: true,
+  }).traceImageToSvg(imageData);
+
+  return normalizeTracedSvgToIcon(tracedSvg);
 }
 
 function wrapSvg(content: string, viewBox: string) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${escapeAttribute(viewBox)}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${content}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${escapeAttribute(viewBox)}" fill="currentColor" stroke="none">${content}</svg>`;
+}
+
+function normalizeTracedSvgToIcon(svgText: string) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgText, 'image/svg+xml');
+  const sourceSvg = doc.querySelector('svg');
+  if (!sourceSvg) throw new Error('Could not trace this bitmap.');
+
+  const paths = Array.from(sourceSvg.querySelectorAll('path'))
+    .filter((path) => {
+      const fill = path.getAttribute('fill') || '';
+      const opacity = Number(path.getAttribute('opacity') || '1');
+      return Boolean(path.getAttribute('d')) && opacity > 0.05 && !isWhiteFill(fill);
+    })
+    .map((path) => {
+      path.setAttribute('fill', 'currentColor');
+      path.setAttribute('fill-rule', 'evenodd');
+      path.setAttribute('clip-rule', 'evenodd');
+      path.removeAttribute('stroke');
+      path.removeAttribute('stroke-width');
+      path.removeAttribute('opacity');
+      path.removeAttribute('desc');
+      return new XMLSerializer().serializeToString(path);
+    });
+
+  if (paths.length === 0) throw new Error('Could not find a strong foreground shape. Try a darker logo or transparent PNG.');
+  const viewBox = sourceSvg.getAttribute('viewBox') || `0 0 ${TRACE_CANVAS_SIZE} ${TRACE_CANVAS_SIZE}`;
+  return wrapSvg(paths.join(''), viewBox);
+}
+
+function computeOtsuThreshold(values: Uint8ClampedArray) {
+  const histogram = new Array<number>(256).fill(0);
+  let total = 0;
+  let weightedTotal = 0;
+
+  for (const value of values) {
+    histogram[value] += 1;
+    total += 1;
+    weightedTotal += value;
+  }
+
+  let backgroundWeight = 0;
+  let backgroundSum = 0;
+  let bestVariance = 0;
+  let threshold = 64;
+
+  for (let value = 0; value < histogram.length; value += 1) {
+    backgroundWeight += histogram[value];
+    if (backgroundWeight === 0) continue;
+
+    const foregroundWeight = total - backgroundWeight;
+    if (foregroundWeight === 0) break;
+
+    backgroundSum += value * histogram[value];
+    const backgroundMean = backgroundSum / backgroundWeight;
+    const foregroundMean = (weightedTotal - backgroundSum) / foregroundWeight;
+    const variance = backgroundWeight * foregroundWeight * (backgroundMean - foregroundMean) ** 2;
+
+    if (variance > bestVariance) {
+      bestVariance = variance;
+      threshold = value;
+    }
+  }
+
+  return threshold;
+}
+
+function isWhiteFill(fill: string) {
+  const match = fill.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
+  if (!match) return false;
+  const [, red, green, blue] = match.map(Number);
+  return red > 245 && green > 245 && blue > 245;
+}
+
+function isRenderableSvgElement(node: SVGElement) {
+  return ['path', 'circle', 'ellipse', 'line', 'polygon', 'polyline', 'rect'].includes(node.tagName.toLowerCase());
 }
 
 function loadImage(sourceUrl: string) {
@@ -381,7 +476,7 @@ function createReactComponentSnippet(name: string, svg: string) {
     .replace(/^<svg[^>]*>/, '')
     .replace(/<\/svg>$/, '')
     .trim();
-  return `import type { SVGProps } from 'react';\n\nconst iconMarkup = \`${escapeTemplateLiteral(inner)}\`;\n\nexport function ${componentName}(props: SVGProps<SVGSVGElement>) {\n  return (\n    <svg\n      xmlns="http://www.w3.org/2000/svg"\n      viewBox="${viewBox}"\n      fill="none"\n      stroke="currentColor"\n      strokeWidth={2}\n      strokeLinecap="round"\n      strokeLinejoin="round"\n      dangerouslySetInnerHTML={{ __html: iconMarkup }}\n      {...props}\n    />\n  );\n}`;
+  return `import type { SVGProps } from 'react';\n\nconst iconMarkup = \`${escapeTemplateLiteral(inner)}\`;\n\nexport function ${componentName}(props: SVGProps<SVGSVGElement>) {\n  return (\n    <svg\n      xmlns="http://www.w3.org/2000/svg"\n      viewBox="${viewBox}"\n      fill="currentColor"\n      stroke="none"\n      dangerouslySetInnerHTML={{ __html: iconMarkup }}\n      {...props}\n    />\n  );\n}`;
 }
 
 function toIconName(value: string) {

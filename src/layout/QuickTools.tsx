@@ -79,6 +79,7 @@ export default function QuickTools() {
   }, [openTool]);
 
   useEffect(() => {
+    window.speechSynthesis?.getVoices();
     return () => {
       translatorAbortRef.current?.abort();
       window.speechSynthesis?.cancel();
@@ -236,7 +237,10 @@ export default function QuickTools() {
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = normalizeSpeechLanguage(languageCode);
+    const speechLanguage = normalizeSpeechLanguage(languageCode);
+    utterance.lang = speechLanguage;
+    const voice = selectSpeechVoice(speechLanguage);
+    if (voice) utterance.voice = voice;
     utterance.onend = () => setTranslatorSpeakingTarget((current) => (current === kind ? null : current));
     utterance.onerror = () => setTranslatorSpeakingTarget((current) => (current === kind ? null : current));
     setTranslatorSpeakingTarget(kind);
@@ -590,6 +594,29 @@ function normalizeSpeechLanguage(languageCode: string) {
   if (code.startsWith('de')) return 'de-DE';
   if (code.startsWith('es')) return 'es-ES';
   return 'en-US';
+}
+
+function selectSpeechVoice(languageCode: string) {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  const code = languageCode.toLowerCase();
+  const primary = code.split('-')[0];
+
+  if (primary === 'vi') {
+    return (
+      voices.find((voice) => voice.lang.toLowerCase() === 'vi-vn') ??
+      voices.find((voice) => voice.lang.toLowerCase().startsWith('vi')) ??
+      voices.find((voice) => /vietnam|tiếng việt|tieng viet/i.test(voice.name)) ??
+      null
+    );
+  }
+
+  return (
+    voices.find((voice) => voice.lang.toLowerCase() === code) ??
+    voices.find((voice) => voice.lang.toLowerCase().startsWith(`${primary}-`)) ??
+    voices.find((voice) => voice.lang.toLowerCase().startsWith(primary)) ??
+    null
+  );
 }
 
 function guessVietnameseOrEnglish(text: string) {
