@@ -7,7 +7,7 @@ export function registerImportedModule(mod: ImportedModule) {
   moduleRegistry.upsert({
     manifest: mod,
     component: () => createElement(IframeModule, { url: mod.url }),
-    source: 'imported',
+    source: mod.moduleType === 'panel' ? 'panel' : 'imported',
   });
 }
 
@@ -23,7 +23,7 @@ export function syncRegistryWithModuleStore(
   const importedIds = new Set(importedModules.map((mod) => mod.id));
 
   moduleRegistry.getAll().forEach((mod) => {
-    if (mod.source === 'imported' && !importedIds.has(mod.manifest.id)) {
+    if ((mod.source === 'imported' || mod.source === 'panel') && !importedIds.has(mod.manifest.id)) {
       moduleRegistry.unregister(mod.manifest.id);
     }
   });

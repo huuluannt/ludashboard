@@ -252,7 +252,7 @@ export default function GlobalModuleSearch() {
           ) : (
             searchResults.map((mod, index) => {
               const selected = index === selectedSearchIndex;
-              const iconToneClass = mod.source === 'native' ? 'module-icon-native' : '';
+              const iconToneClass = getModuleIconToneClass(mod.source);
               return (
                 <div
                   key={mod.manifest.id}
@@ -310,4 +310,10 @@ export default function GlobalModuleSearch() {
       )}
     </div>
   );
+}
+
+function getModuleIconToneClass(source?: RegisteredModule['source']) {
+  if (source === 'native') return 'module-icon-native';
+  if (source === 'panel') return 'module-icon-panel';
+  return '';
 }

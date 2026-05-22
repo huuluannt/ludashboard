@@ -2,8 +2,11 @@ import { create } from 'zustand';
 import { offlineStorage } from '@/storage/offlineStorage';
 import type { ModuleManifest } from '@/modules/moduleTypes';
 
+export type ImportedModuleType = 'url' | 'panel';
+
 export interface ImportedModule extends ModuleManifest {
   url: string; // The online URL
+  moduleType?: ImportedModuleType;
 }
 
 export interface ModuleOverride extends Omit<ModuleManifest, 'version'> {

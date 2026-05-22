@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent, KeyboardEvent, SyntheticEvent } from 'react';
 import Icon from '@/components/Icon';
 import ImportModuleModal from '@/components/ImportModuleModal';
-import type { EditableModule } from '@/components/ImportModuleModal';
+import type { EditableModule, ImportModulePreset } from '@/components/ImportModuleModal';
 import LuVideoMiniPlayer from '@/components/luvideo/LuVideoMiniPlayer';
 import MiniMusicPlayer from '@/components/lumusic/MiniMusicPlayer';
 import { app } from '@/firebase/config';
@@ -56,6 +56,7 @@ export default function LeftPane() {
   const [draggedModuleId, setDraggedModuleId] = useState<string | null>(null);
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [editingModule, setEditingModule] = useState<EditableModule | null>(null);
+  const [importPreset, setImportPreset] = useState<ImportModulePreset>('url');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [selectedFilterIndex, setSelectedFilterIndex] = useState(0);
   const [showAllModules, setShowAllModules] = useState(false);
@@ -208,6 +209,7 @@ export default function LeftPane() {
             isImported: false,
           },
     );
+    setImportPreset(importedMod?.moduleType ?? 'url');
     setImportModalOpen(true);
   };
 
@@ -320,15 +322,16 @@ export default function LeftPane() {
       </div>
 
       {!collapsed && (
-        <div className="px-3 pb-2 flex-shrink-0">
+        <div className="grid grid-cols-2 gap-2 px-3 pb-2 flex-shrink-0">
           <button
             onClick={() => {
               setEditingModule(null);
+              setImportPreset('url');
               setImportModalOpen(true);
             }}
             className="
-              w-full h-9 px-3 rounded-xl
-              flex items-center gap-2.5
+              h-9 min-w-0 px-2 rounded-xl
+              flex items-center justify-center gap-1.5
               border border-dashed border-[var(--color-border)]
               bg-white text-xs font-medium text-[var(--color-text-secondary)]
               hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]
@@ -337,7 +340,25 @@ export default function LeftPane() {
             "
           >
             <Icon name="plus" size={14} />
-            <span>Import Module</span>
+            <span className="truncate">Import URL</span>
+          </button>
+          <button
+            onClick={() => {
+              setEditingModule(null);
+              setImportPreset('panel');
+              setImportModalOpen(true);
+            }}
+            className="
+              h-9 min-w-0 px-2 rounded-xl
+              flex items-center justify-center gap-1.5
+              border border-dashed border-blue-200
+              bg-blue-50 text-xs font-medium text-blue-700
+              hover:border-blue-300 hover:bg-blue-100
+              transition-colors cursor-pointer
+            "
+          >
+            <Icon name="layout-panel-top" size={14} />
+            <span className="truncate">Import Panel</span>
           </button>
         </div>
       )}
@@ -561,8 +582,12 @@ export default function LeftPane() {
 
       {importModalOpen && (
         <ImportModuleModal
-          onClose={() => setImportModalOpen(false)}
+          onClose={() => {
+            setImportModalOpen(false);
+            setEditingModule(null);
+          }}
           editingModule={editingModule}
+          importPreset={importPreset}
         />
       )}
     </aside>
@@ -614,7 +639,7 @@ function OpenModuleCard({
   const [dragOver, setDragOver] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isImported = importedMod != null;
-  const iconToneClass = source === 'native' ? 'module-icon-native' : '';
+  const iconToneClass = getModuleIconToneClass(source);
 
   const stopCardAction = (event: SyntheticEvent) => {
     event.stopPropagation();
@@ -852,7 +877,7 @@ function ModuleCard({
   const [dragOver, setDragOver] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isImported = importedMod != null;
-  const iconToneClass = mod.source === 'native' ? 'module-icon-native' : '';
+  const iconToneClass = getModuleIconToneClass(mod.source);
 
   const stopCardAction = (event: SyntheticEvent) => {
     event.stopPropagation();
@@ -1035,6 +1060,12 @@ function ModuleCard({
       </div>
     </div>
   );
+}
+
+function getModuleIconToneClass(source?: RegisteredModule['source']) {
+  if (source === 'native') return 'module-icon-native';
+  if (source === 'panel') return 'module-icon-panel';
+  return '';
 }
 
 function DropdownItem({

@@ -30,7 +30,7 @@ export interface ModuleManifest {
 export interface RegisteredModule {
   manifest: ModuleManifest;
   component: ComponentType;
-  source?: 'native' | 'imported';
+  source?: 'native' | 'imported' | 'panel';
 }
 
 /**

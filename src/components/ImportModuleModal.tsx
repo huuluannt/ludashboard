@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useModuleStore } from '@/state/moduleStore';
-import type { ImportedModule, ModuleOverride } from '@/state/moduleStore';
+import type { ImportedModule, ImportedModuleType, ModuleOverride } from '@/state/moduleStore';
 import { useTabStore } from '@/state/tabStore';
 import { useSidebarStore } from '@/state/sidebarStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
@@ -11,18 +11,38 @@ import { getCustomIconLibrary } from '@/lib/customIconLibrary';
 import Icon, { availableIcons } from './Icon';
 
 const MAX_ICON_SIZE = 512 * 1024;
+const PANEL_MODULE_DEFAULTS = {
+  title: 'Panel-',
+  id: 'panel',
+  icon: 'layout-panel-top',
+  category: 'panel',
+  description: 'panel',
+  url: 'https://lupanel.vercel.app/',
+} satisfies Pick<ImportedModule, 'title' | 'id' | 'icon' | 'category' | 'description' | 'url'>;
+const URL_MODULE_DEFAULTS = {
+  title: '',
+  id: '',
+  icon: 'globe',
+  category: 'Imported',
+  description: '',
+  url: '',
+} satisfies Pick<ImportedModule, 'title' | 'id' | 'icon' | 'category' | 'description' | 'url'>;
 
 export type EditableModule = ModuleManifest & {
   url?: string;
   isImported?: boolean;
+  moduleType?: ImportedModuleType;
 };
+
+export type ImportModulePreset = ImportedModuleType;
 
 interface ImportModuleModalProps {
   onClose: () => void;
   editingModule?: EditableModule | null;
+  importPreset?: ImportModulePreset;
 }
 
-export default function ImportModuleModal({ onClose, editingModule }: ImportModuleModalProps) {
+export default function ImportModuleModal({ onClose, editingModule, importPreset = 'url' }: ImportModuleModalProps) {
   const importModule = useModuleStore((s) => s.importModule);
   const removeModule = useModuleStore((s) => s.removeModule);
   const saveModuleOverride = useModuleStore((s) => s.saveModuleOverride);
@@ -34,13 +54,15 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
   const isImportedEdit = editingModule?.isImported ?? false;
   const hasUrlField = !isEditing || isImportedEdit;
   const moduleIdLocked = isEditing && !isImportedEdit;
+  const moduleType = editingModule?.moduleType ?? importPreset;
+  const defaults = importPreset === 'panel' ? PANEL_MODULE_DEFAULTS : URL_MODULE_DEFAULTS;
 
-  const [title, setTitle] = useState(editingModule?.title || '');
-  const [moduleId, setModuleId] = useState(editingModule?.id || '');
-  const [icon, setIcon] = useState(editingModule?.icon || 'globe');
-  const [category, setCategory] = useState(editingModule?.category || 'Imported');
-  const [description, setDescription] = useState(editingModule?.description || '');
-  const [url, setUrl] = useState(editingModule?.url || '');
+  const [title, setTitle] = useState(editingModule?.title || defaults.title);
+  const [moduleId, setModuleId] = useState(editingModule?.id || defaults.id);
+  const [icon, setIcon] = useState(editingModule?.icon || defaults.icon);
+  const [category, setCategory] = useState(editingModule?.category || defaults.category);
+  const [description, setDescription] = useState(editingModule?.description || defaults.description);
+  const [url, setUrl] = useState(editingModule?.url || defaults.url);
   const [offline, setOffline] = useState(editingModule?.offline || false);
   const [openInNewWindow, setOpenInNewWindow] = useState(editingModule?.openInNewWindow || false);
   const [formError, setFormError] = useState('');
@@ -142,6 +164,7 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
       offline,
       openInNewWindow,
       url: url.trim(),
+      moduleType,
     };
 
     if (isEditing && editingModule && editingModule.id !== newModule.id) {
@@ -170,7 +193,7 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
         <div className="px-5 py-4 border-b border-[var(--color-border-subtle)] flex items-center justify-between">
           <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-            {isEditing ? 'Edit Module' : 'Import Online Module'}
+            {isEditing ? 'Edit Module' : importPreset === 'panel' ? 'Import Panel Module' : 'Import Online Module'}
           </h2>
           <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-subtle)] transition-colors cursor-pointer">
             <Icon name="x" size={16} />
