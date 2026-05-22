@@ -17,42 +17,58 @@ export const GOOGLE_WORKSPACE_APPS = {
     appName: 'LuClassroom',
     callbackPath: '/api/classroom/callback',
     redirectEnv: 'GOOGLE_CLASSROOM_REDIRECT_URI',
+    sharedCallbackPath: '/api/gmail/callback',
+    sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
     scopes: ['openid', 'email', 'https://www.googleapis.com/auth/classroom.courses.readonly'],
   },
   photos: {
     appName: 'LuAnh',
     callbackPath: '/api/photos/callback',
     redirectEnv: 'GOOGLE_PHOTOS_REDIRECT_URI',
+    sharedCallbackPath: '/api/gmail/callback',
+    sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
     scopes: ['openid', 'email', 'https://www.googleapis.com/auth/photoslibrary.readonly'],
   },
   keep: {
     appName: 'LuKeep',
     callbackPath: '/api/keep/callback',
     redirectEnv: 'GOOGLE_KEEP_REDIRECT_URI',
+    sharedCallbackPath: '/api/gmail/callback',
+    sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
     scopes: ['openid', 'email', 'https://www.googleapis.com/auth/keep.readonly'],
   },
   contacts: {
     appName: 'LuDanhba',
     callbackPath: '/api/contacts/callback',
     redirectEnv: 'GOOGLE_CONTACTS_REDIRECT_URI',
+    sharedCallbackPath: '/api/gmail/callback',
+    sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
     scopes: ['openid', 'email', 'https://www.googleapis.com/auth/contacts.readonly'],
   },
 };
 
 export function getGoogleWorkspaceConfig(appId, req) {
   const app = getAppConfig(appId);
+  const redirectUri =
+    process.env[app.redirectEnv] ||
+    (app.sharedRedirectEnv ? process.env[app.sharedRedirectEnv] : '') ||
+    `${getRequestOrigin(req)}${app.sharedCallbackPath || app.callbackPath}`;
+
   return {
     ...app,
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    redirectUri: process.env[app.redirectEnv] || `${getRequestOrigin(req)}${app.callbackPath}`,
+    redirectUri,
   };
 }
 
 export function assertGoogleWorkspaceEnv(appId, req) {
   const config = getGoogleWorkspaceConfig(appId, req);
   if (!config.clientId || !config.clientSecret || !config.redirectUri) {
-    throw new Error(`GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and ${config.redirectEnv} are required for ${config.appName}.`);
+    const redirectEnv = config.sharedRedirectEnv
+      ? `${config.redirectEnv} or ${config.sharedRedirectEnv}`
+      : config.redirectEnv;
+    throw new Error(`GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and ${redirectEnv} are required for ${config.appName}.`);
   }
 }
 

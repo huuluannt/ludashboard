@@ -1,4 +1,4 @@
-import { consumeGoogleOAuthState, upsertGoogleAccount } from '../../_lib/googleAppTokenStore.js';
+import { consumeGoogleOAuthState, parseGoogleOAuthState, upsertGoogleAccount } from '../../_lib/googleAppTokenStore.js';
 import {
   assertGoogleWorkspaceEnv,
   decodeJwtPayload,
@@ -9,43 +9,43 @@ import {
 import { getQuery } from '../../_lib/http.js';
 
 export function createGoogleCallbackHandler(appId) {
-  const appName = GOOGLE_WORKSPACE_APPS[appId]?.appName || 'Google module';
-
   return async function handler(req, res) {
     const query = getQuery(req);
     const code = query.get('code');
     const state = query.get('state');
     const error = query.get('error');
+    const callbackAppId = state ? parseGoogleOAuthState(state, appId).appId : appId;
+    const appName = GOOGLE_WORKSPACE_APPS[callbackAppId]?.appName || 'Google module';
 
     if (error) {
-      sendGoogleCallbackHtml(res, appId, false, `Google rejected the request: ${error}`);
+      sendGoogleCallbackHtml(res, callbackAppId, false, `Google rejected the request: ${error}`);
       return;
     }
 
     if (!code || !state) {
-      sendGoogleCallbackHtml(res, appId, false, 'Missing OAuth code or state.');
+      sendGoogleCallbackHtml(res, callbackAppId, false, 'Missing OAuth code or state.');
       return;
     }
 
     try {
-      assertGoogleWorkspaceEnv(appId, req);
-      const oauthState = await consumeGoogleOAuthState(appId, state);
+      assertGoogleWorkspaceEnv(callbackAppId, req);
+      const oauthState = await consumeGoogleOAuthState(callbackAppId, state);
       if (!oauthState?.ownerId) {
-        sendGoogleCallbackHtml(res, appId, false, `OAuth state expired. Please reconnect from ${appName}.`);
+        sendGoogleCallbackHtml(res, callbackAppId, false, `OAuth state expired. Please reconnect from ${appName}.`);
         return;
       }
 
-      const tokens = await exchangeGoogleWorkspaceCodeForTokens(appId, req, code);
+      const tokens = await exchangeGoogleWorkspaceCodeForTokens(callbackAppId, req, code);
       const identity = decodeJwtPayload(tokens.id_token);
       const accountId = String(identity.sub || '');
       const email = String(identity.email || '');
 
       if (!accountId || !email) {
-        sendGoogleCallbackHtml(res, appId, false, 'Google did not return account identity. Reconnect and grant email access.');
+        sendGoogleCallbackHtml(res, callbackAppId, false, 'Google did not return account identity. Reconnect and grant email access.');
         return;
       }
 
-      await upsertGoogleAccount(appId, oauthState.ownerId, {
+      await upsertGoogleAccount(callbackAppId, oauthState.ownerId, {
         accountId,
         email,
         accessToken: tokens.access_token,
@@ -56,12 +56,12 @@ export function createGoogleCallbackHandler(appId) {
         needsReconnect: false,
       });
 
-      sendGoogleCallbackHtml(res, appId, true, `Connected ${email} to ${appName}.`);
+      sendGoogleCallbackHtml(res, callbackAppId, true, `Connected ${email} to ${appName}.`);
     } catch (callbackError) {
       res.statusCode = 500;
       sendGoogleCallbackHtml(
         res,
-        appId,
+        callbackAppId,
         false,
         callbackError instanceof Error ? callbackError.message : `Unable to connect ${appName}.`,
       );

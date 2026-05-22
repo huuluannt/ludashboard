@@ -23,19 +23,35 @@ let redisClient = null;
 
 export async function createGoogleOAuthState(appId, ownerId) {
   assertKnownApp(appId);
-  const state = randomBytes(24).toString('base64url');
-  await redis().set(oauthStateKey(appId, state), { ownerId, createdAt: Date.now() }, { ex: STATE_TTL_SECONDS });
-  return state;
+  const nonce = randomBytes(24).toString('base64url');
+  await redis().set(oauthStateKey(appId, nonce), { ownerId, createdAt: Date.now() }, { ex: STATE_TTL_SECONDS });
+  return encodeGoogleOAuthState(appId, nonce);
 }
 
 export async function consumeGoogleOAuthState(appId, state) {
   assertKnownApp(appId);
-  const key = oauthStateKey(appId, state);
+  const parsed = parseGoogleOAuthState(state, appId);
+  if (parsed.appId !== appId) return null;
+
+  const key = oauthStateKey(appId, parsed.nonce);
   const entry = await redis().get(key);
   if (!entry || typeof entry !== 'object') return null;
   await redis().del(key);
   if (!entry.createdAt || Date.now() - Number(entry.createdAt) > STATE_TTL_SECONDS * 1000) return null;
   return entry;
+}
+
+function encodeGoogleOAuthState(appId, nonce) {
+  return `${appId}.${nonce}`;
+}
+
+export function parseGoogleOAuthState(state, fallbackAppId) {
+  const rawState = String(state || '');
+  const [maybeAppId, maybeNonce] = rawState.split('.', 2);
+  if (maybeNonce && APP_DEFAULT_PREFIX[maybeAppId]) {
+    return { appId: maybeAppId, nonce: rawState.slice(maybeAppId.length + 1) };
+  }
+  return { appId: fallbackAppId, nonce: rawState };
 }
 
 export async function listGoogleAccounts(appId, ownerId) {
