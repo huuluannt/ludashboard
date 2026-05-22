@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import Icon from '@/components/Icon';
 import { app } from '@/firebase/config';
@@ -21,6 +21,7 @@ const TARGET_LANGUAGES = [
 ];
 
 const languageLabelByCode = new Map(TARGET_LANGUAGES.map((language) => [language.code, language.label]));
+const GOOGLE_TRANSLATE_URL = 'https://translate.google.com.vn/';
 
 export default function LuDichModule() {
   const [sourceText, setSourceText] = useState('');
@@ -30,7 +31,14 @@ export default function LuDichModule() {
   const [detectedLanguage, setDetectedLanguage] = useState('');
   const [resolvedTargetLanguage, setResolvedTargetLanguage] = useState('');
   const [translating, setTranslating] = useState(false);
+  const [copiedTarget, setCopiedTarget] = useState<'source' | 'translation' | null>(null);
+  const [speakingTarget, setSpeakingTarget] = useState<'source' | 'translation' | null>(null);
+  const [showGoogleTranslateFrame, setShowGoogleTranslateFrame] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    return () => window.speechSynthesis?.cancel();
+  }, []);
 
   const translate = async () => {
     const text = sourceText.trim();
@@ -78,16 +86,61 @@ export default function LuDichModule() {
     setResolvedTargetLanguage(sourceLanguage);
   };
 
+  const copyText = async (kind: 'source' | 'translation', value: string) => {
+    if (!value) return;
+    await copyTextToClipboard(value);
+    setCopiedTarget(kind);
+    window.setTimeout(() => {
+      setCopiedTarget((current) => (current === kind ? null : current));
+    }, 1100);
+  };
+
+  const clearSource = () => {
+    window.speechSynthesis?.cancel();
+    setSourceText('');
+    setTranslatedText('');
+    setDetectedLanguage('');
+    setResolvedTargetLanguage('');
+    setCopiedTarget(null);
+    setSpeakingTarget(null);
+    setError('');
+  };
+
+  const speakText = (kind: 'source' | 'translation', value: string, languageCode: string) => {
+    const text = value.trim();
+    if (!text || !('speechSynthesis' in window)) return;
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = normalizeSpeechLanguage(languageCode);
+    utterance.onend = () => setSpeakingTarget((current) => (current === kind ? null : current));
+    utterance.onerror = () => setSpeakingTarget((current) => (current === kind ? null : current));
+    setSpeakingTarget(kind);
+    window.speechSynthesis.speak(utterance);
+  };
+
   return (
     <div className="flex h-full min-w-0 flex-col bg-white text-[var(--color-text-primary)]">
       <header className="flex flex-shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-border-subtle)] px-3 py-2">
         <div className="flex min-w-[210px] flex-1 items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
+          <button
+            type="button"
+            onClick={() => setShowGoogleTranslateFrame((current) => !current)}
+            title={showGoogleTranslateFrame ? 'Return to LuDich API view' : 'Open Google Translate here'}
+            aria-label="Open Google Translate here"
+            className={`flex h-8 w-8 items-center justify-center rounded-xl border transition-colors ${
+              showGoogleTranslateFrame
+                ? 'border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent)]'
+                : 'border-[var(--color-border)] bg-[var(--color-surface-subtle)] text-[var(--color-accent)] hover:bg-white'
+            }`}
+          >
             <Icon name="languages" size={17} />
-          </div>
+          </button>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold">LuDich</h2>
-            <p className="truncate text-[11px] text-[var(--color-text-tertiary)]">Google Translate API</p>
+            <p className="truncate text-[11px] text-[var(--color-text-tertiary)]">
+              {showGoogleTranslateFrame ? 'Google Translate iframe' : 'Google Translate API'}
+            </p>
           </div>
         </div>
 
@@ -119,37 +172,183 @@ export default function LuDichModule() {
         </div>
       )}
 
+      {showGoogleTranslateFrame ? (
+        <main className="min-h-0 flex-1 bg-[var(--color-surface-muted)] p-3">
+          <iframe
+            title="Google Translate"
+            src={GOOGLE_TRANSLATE_URL}
+            className="h-full w-full rounded-2xl border border-[var(--color-border)] bg-white shadow-sm"
+          />
+        </main>
+      ) : (
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 bg-[var(--color-surface-muted)] p-3 lg:grid-cols-2">
         <section className="flex min-h-[280px] flex-col rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
-          <div className="border-b border-[var(--color-border-subtle)] px-4 py-3 text-xs font-semibold text-[var(--color-text-secondary)]">Source</div>
-          <textarea
-            value={sourceText}
-            onChange={(event) => setSourceText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
-              event.preventDefault();
-              void translate();
-            }}
-            className="min-h-0 flex-1 resize-none rounded-b-2xl bg-transparent p-4 text-sm leading-7 outline-none placeholder:text-[var(--color-text-tertiary)]"
-            placeholder="Enter text to translate..."
-          />
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] px-4 py-3 text-xs font-semibold text-[var(--color-text-secondary)]">
+            <span>Source</span>
+            <div className="flex items-center gap-1.5">
+              <HeaderIconButton
+                active={speakingTarget === 'source'}
+                disabled={!sourceText}
+                icon="speaker"
+                label="Read source text"
+                onClick={() => speakText('source', sourceText, sourceLanguage === 'auto' ? detectedLanguage : sourceLanguage)}
+              />
+              <button
+                type="button"
+                onClick={clearSource}
+                disabled={!sourceText && !translatedText && !error}
+                className="h-7 rounded-lg bg-[var(--color-text-primary)] px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="relative min-h-0 flex-1">
+            <textarea
+              value={sourceText}
+              onChange={(event) => setSourceText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                void translate();
+              }}
+              className="h-full w-full resize-none rounded-b-2xl bg-transparent p-4 pr-12 text-sm leading-7 outline-none placeholder:text-[var(--color-text-tertiary)]"
+              placeholder="Enter text to translate..."
+            />
+            <CopyButton
+              copied={copiedTarget === 'source'}
+              disabled={!sourceText}
+              label="Copy source text"
+              onClick={() => void copyText('source', sourceText)}
+            />
+          </div>
         </section>
 
         <section className="flex min-h-[280px] flex-col rounded-2xl border border-[var(--color-border)] bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-3 text-xs font-semibold text-[var(--color-text-secondary)]">
-            <span>Translation</span>
-            {(detectedLanguage || resolvedTargetLanguage) && (
-              <span className="text-[10px] text-[var(--color-text-tertiary)]">
-                {detectedLanguage ? `Detected: ${detectedLanguage}` : ''}
-                {resolvedTargetLanguage ? ` -> ${languageLabelByCode.get(resolvedTargetLanguage) || resolvedTargetLanguage}` : ''}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              <span>Translation</span>
+              <HeaderIconButton
+                active={speakingTarget === 'translation'}
+                disabled={!translatedText}
+                icon="speaker"
+                label="Read translation"
+                onClick={() => speakText('translation', translatedText, resolveSpeechTargetLanguage(targetLanguage, resolvedTargetLanguage, detectedLanguage))}
+              />
+            </div>
+            <div className="min-w-0 text-right">
+              {(detectedLanguage || resolvedTargetLanguage) && (
+                <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                  {detectedLanguage ? `Detected: ${detectedLanguage}` : ''}
+                  {resolvedTargetLanguage ? ` -> ${languageLabelByCode.get(resolvedTargetLanguage) || resolvedTargetLanguage}` : ''}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="min-h-0 flex-1 whitespace-pre-wrap p-4 text-sm leading-7">
+          <div className="relative min-h-0 flex-1 whitespace-pre-wrap p-4 pr-12 text-sm leading-7">
+            <CopyButton
+              copied={copiedTarget === 'translation'}
+              disabled={!translatedText}
+              label="Copy translation"
+              onClick={() => void copyText('translation', translatedText)}
+            />
             {translatedText || <span className="text-[var(--color-text-tertiary)]">Translation will appear here.</span>}
           </div>
         </section>
       </main>
+      )}
     </div>
   );
+}
+
+function HeaderIconButton({
+  active,
+  disabled,
+  icon,
+  label,
+  onClick,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  icon: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      className={`flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-white transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+        active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
+      }`}
+    >
+      <Icon name={icon} size={13} />
+    </button>
+  );
+}
+
+function CopyButton({
+  copied,
+  disabled,
+  label,
+  onClick,
+}: {
+  copied: boolean;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={copied ? 'Copied' : label}
+      aria-label={label}
+      className={`absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--color-border-subtle)] bg-white/90 shadow-sm transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-0 ${
+        copied ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
+      }`}
+    >
+      <Icon name="copy" size={13} />
+    </button>
+  );
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
+
+function normalizeSpeechLanguage(languageCode: string) {
+  const code = String(languageCode || '').toLowerCase();
+  if (code.startsWith('vi')) return 'vi-VN';
+  if (code.startsWith('en')) return 'en-US';
+  if (code.startsWith('ja')) return 'ja-JP';
+  if (code.startsWith('ko')) return 'ko-KR';
+  if (code.startsWith('zh')) return 'zh-CN';
+  if (code.startsWith('fr')) return 'fr-FR';
+  if (code.startsWith('de')) return 'de-DE';
+  if (code.startsWith('es')) return 'es-ES';
+  return 'en-US';
+}
+
+function resolveSpeechTargetLanguage(targetLanguage: string, resolvedTargetLanguage: string, detectedLanguage: string) {
+  if (resolvedTargetLanguage) return resolvedTargetLanguage;
+  if (targetLanguage !== 'auto-pair') return targetLanguage;
+  return String(detectedLanguage || '').toLowerCase().startsWith('vi') ? 'en' : 'vi';
 }

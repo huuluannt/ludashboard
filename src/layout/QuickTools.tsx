@@ -30,6 +30,7 @@ export default function QuickTools() {
   const [translatorStatus, setTranslatorStatus] = useState('');
   const [translatorModel, setTranslatorModel] = useState('');
   const [translatorProvider, setTranslatorProvider] = useState<TranslatorProvider>('google');
+  const [translatorCopied, setTranslatorCopied] = useState<'source' | 'translation' | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const translatorInputRef = useRef<HTMLTextAreaElement>(null);
@@ -194,6 +195,15 @@ export default function QuickTools() {
     window.setTimeout(() => translatorInputRef.current?.focus(), 0);
   };
 
+  const copyTranslatorText = async (kind: 'source' | 'translation', value: string) => {
+    if (!value) return;
+    await copyTextToClipboard(value);
+    setTranslatorCopied(kind);
+    window.setTimeout(() => {
+      setTranslatorCopied((current) => (current === kind ? null : current));
+    }, 1100);
+  };
+
   const setTranslatorOpen = () => setOpenTool((tool) => (tool === 'translator' ? null : 'translator'));
   const setMoneyOpen = () => setOpenTool((tool) => (tool === 'money' ? null : 'money'));
   const setCalculatorOpen = () => setOpenTool((tool) => (tool === 'calculator' ? null : 'calculator'));
@@ -241,23 +251,37 @@ export default function QuickTools() {
             </button>
           </div>
 
-          <textarea
-            ref={translatorInputRef}
-            value={translatorText}
-            aria-label="Translator input"
-            onChange={(event) => setTranslatorText(event.currentTarget.value.slice(0, 3000))}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                void translateText();
-              }
-              if (event.key === 'Escape') setOpenTool(null);
-            }}
-            className="min-h-24 w-full resize-none rounded-lg border border-black/35 bg-[var(--color-surface-subtle)] px-3 py-2 text-sm leading-5 text-[var(--color-text-primary)] outline-none transition-colors placeholder:text-[var(--color-text-tertiary)] focus:border-black focus:bg-white"
-            placeholder="Type Vietnamese or English, then press Enter..."
-          />
+          <div className="relative">
+            <textarea
+              ref={translatorInputRef}
+              value={translatorText}
+              aria-label="Translator input"
+              onChange={(event) => setTranslatorText(event.currentTarget.value.slice(0, 3000))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  void translateText();
+                }
+                if (event.key === 'Escape') setOpenTool(null);
+              }}
+              className="min-h-24 w-full resize-none rounded-lg border border-black/35 bg-[var(--color-surface-subtle)] px-3 py-2 pr-9 text-sm leading-5 text-[var(--color-text-primary)] outline-none transition-colors placeholder:text-[var(--color-text-tertiary)] focus:border-black focus:bg-white"
+              placeholder="Type Vietnamese or English, then press Enter..."
+            />
+            <CopyButton
+              copied={translatorCopied === 'source'}
+              disabled={!translatorText}
+              label="Copy source text"
+              onClick={() => void copyTranslatorText('source', translatorText)}
+            />
+          </div>
 
-          <div className="mt-2 min-h-24 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-2">
+          <div className="relative mt-2 min-h-24 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-2 pr-9">
+            <CopyButton
+              copied={translatorCopied === 'translation'}
+              disabled={!translation}
+              label="Copy translation"
+              onClick={() => void copyTranslatorText('translation', translation)}
+            />
             <p className={`whitespace-pre-wrap text-sm leading-5 ${translation ? 'text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)]'}`}>
               {translation || (isTranslating ? 'Translating...' : 'Translation will appear here.')}
             </p>
@@ -402,6 +426,33 @@ function QuickToolButton({ active, icon, label, textIcon, onClick }: QuickToolBu
   );
 }
 
+function CopyButton({
+  copied,
+  disabled,
+  label,
+  onClick,
+}: {
+  copied: boolean;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={copied ? 'Copied' : label}
+      aria-label={label}
+      className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md border border-[var(--color-border-subtle)] bg-white/90 shadow-sm transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-0 ${
+        copied ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'
+      }`}
+    >
+      <Icon name="copy" size={12} />
+    </button>
+  );
+}
+
 async function fetchGoogleTranslation(text: string, signal: AbortSignal) {
   const user = getAuth(app).currentUser;
   if (!user) {
@@ -422,6 +473,23 @@ async function fetchGoogleTranslation(text: string, signal: AbortSignal) {
     }),
     signal,
   });
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
 }
 
 function formatGoogleTranslatorMeta(detectedLanguage: string, targetLanguage: string) {
