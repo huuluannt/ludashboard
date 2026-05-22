@@ -5,10 +5,15 @@ import { VitePWA } from 'vite-plugin-pwa';
 import geminiApiHandler from './api/ai/gemini/[...path].js';
 import groqApiHandler from './api/ai/groq/[...path].js';
 import calendarApiHandler from './api/calendar/[...path].js';
+import classroomApiHandler from './api/classroom/[...path].js';
+import contactsApiHandler from './api/contacts/[...path].js';
 import driveApiHandler from './api/drive/[...path].js';
 import gmailApiHandler from './api/gmail/[...path].js';
+import keepApiHandler from './api/keep/[...path].js';
 import musicApiHandler from './api/music/[...path].js';
 import oneDriveApiHandler from './api/onedrive/[...path].js';
+import photosApiHandler from './api/photos/[...path].js';
+import translateApiHandler from './api/translate/[...path].js';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -37,6 +42,14 @@ export default defineConfig(({ mode }) => {
             await calendarApiHandler(req, res);
             return;
           }
+          if (pathname?.startsWith('/api/classroom/')) {
+            await classroomApiHandler(req, res);
+            return;
+          }
+          if (pathname?.startsWith('/api/contacts/')) {
+            await contactsApiHandler(req, res);
+            return;
+          }
           if (pathname?.startsWith('/api/drive/')) {
             await driveApiHandler(req, res);
             return;
@@ -45,12 +58,24 @@ export default defineConfig(({ mode }) => {
             await gmailApiHandler(req, res);
             return;
           }
+          if (pathname?.startsWith('/api/keep/')) {
+            await keepApiHandler(req, res);
+            return;
+          }
           if (pathname?.startsWith('/api/music/')) {
             await musicApiHandler(req, res);
             return;
           }
           if (pathname?.startsWith('/api/onedrive/')) {
             await oneDriveApiHandler(req, res);
+            return;
+          }
+          if (pathname?.startsWith('/api/photos/')) {
+            await photosApiHandler(req, res);
+            return;
+          }
+          if (pathname?.startsWith('/api/translate/')) {
+            await translateApiHandler(req, res);
             return;
           }
           next();

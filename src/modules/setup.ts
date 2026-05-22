@@ -47,6 +47,21 @@ import { manifest as cloudStorageManifest } from './cloud-storage/manifest';
 import LuCalendarModule from './lucalendar/index';
 import { manifest as luCalendarManifest } from './lucalendar/manifest';
 
+import LuClassroomModule from './luclassroom/index';
+import { manifest as luClassroomManifest } from './luclassroom/manifest';
+
+import LuDichModule from './ludich/index';
+import { manifest as luDichManifest } from './ludich/manifest';
+
+import LuAnhModule from './luanh/index';
+import { manifest as luAnhManifest } from './luanh/manifest';
+
+import LuKeepModule from './lukeep/index';
+import { manifest as luKeepManifest } from './lukeep/manifest';
+
+import LuDanhbaModule from './ludanhba/index';
+import { manifest as luDanhbaManifest } from './ludanhba/manifest';
+
 import LuGmailModule from './lugmail/index';
 import { manifest as luGmailManifest } from './lugmail/manifest';
 
@@ -82,6 +97,11 @@ export function setupModules() {
     { manifest: lugeminiManifest, component: LuGeminiModule, source: 'native' },
     { manifest: cloudStorageManifest, component: CloudStorageModule, source: 'native' },
     { manifest: luCalendarManifest, component: LuCalendarModule, source: 'native' },
+    { manifest: luClassroomManifest, component: LuClassroomModule, source: 'native' },
+    { manifest: luDichManifest, component: LuDichModule, source: 'native' },
+    { manifest: luAnhManifest, component: LuAnhModule, source: 'native' },
+    { manifest: luKeepManifest, component: LuKeepModule, source: 'native' },
+    { manifest: luDanhbaManifest, component: LuDanhbaModule, source: 'native' },
     { manifest: luGmailManifest, component: LuGmailModule, source: 'native' },
     { manifest: luDriveManifest, component: LuDriveModule, source: 'native' },
     { manifest: luOnedriveManifest, component: LuOnedriveModule, source: 'native' },

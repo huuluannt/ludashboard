@@ -13,6 +13,30 @@ export const GOOGLE_WORKSPACE_APPS = {
     redirectEnv: 'GOOGLE_DRIVE_REDIRECT_URI',
     scopes: ['openid', 'email', 'https://www.googleapis.com/auth/drive.metadata.readonly'],
   },
+  classroom: {
+    appName: 'LuClassroom',
+    callbackPath: '/api/classroom/callback',
+    redirectEnv: 'GOOGLE_CLASSROOM_REDIRECT_URI',
+    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/classroom.courses.readonly'],
+  },
+  photos: {
+    appName: 'LuAnh',
+    callbackPath: '/api/photos/callback',
+    redirectEnv: 'GOOGLE_PHOTOS_REDIRECT_URI',
+    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/photoslibrary.readonly'],
+  },
+  keep: {
+    appName: 'LuKeep',
+    callbackPath: '/api/keep/callback',
+    redirectEnv: 'GOOGLE_KEEP_REDIRECT_URI',
+    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/keep.readonly'],
+  },
+  contacts: {
+    appName: 'LuDanhba',
+    callbackPath: '/api/contacts/callback',
+    redirectEnv: 'GOOGLE_CONTACTS_REDIRECT_URI',
+    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/contacts.readonly'],
+  },
 };
 
 export function getGoogleWorkspaceConfig(appId, req) {

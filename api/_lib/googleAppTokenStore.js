@@ -5,10 +5,18 @@ const STATE_TTL_SECONDS = 15 * 60;
 const APP_PREFIX_ENV = {
   gmail: 'LUGMAIL_REDIS_PREFIX',
   drive: 'LUDRIVE_REDIS_PREFIX',
+  classroom: 'LUCLASSROOM_REDIS_PREFIX',
+  photos: 'LUANH_REDIS_PREFIX',
+  keep: 'LUKEEP_REDIS_PREFIX',
+  contacts: 'LUDANHBA_REDIS_PREFIX',
 };
 const APP_DEFAULT_PREFIX = {
   gmail: 'ludashboard:lugmail',
   drive: 'ludashboard:ludrive',
+  classroom: 'ludashboard:luclassroom',
+  photos: 'ludashboard:luanh',
+  keep: 'ludashboard:lukeep',
+  contacts: 'ludashboard:ludanhba',
 };
 
 let redisClient = null;
@@ -87,7 +95,7 @@ function redis() {
   const { url, token } = getRedisConfig();
   if (!url || !token) {
     throw new Error(
-      'LuGmail and LuDrive require KV_REST_API_URL and KV_REST_API_TOKEN, or UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN, for server-side token storage.',
+      'Google modules require KV_REST_API_URL and KV_REST_API_TOKEN, or UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN, for server-side token storage.',
     );
   }
 

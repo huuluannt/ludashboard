@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth';
+import GoogleAccountDropdown from '@/components/GoogleAccountDropdown';
 import Icon from '@/components/Icon';
 import { app } from '@/firebase/config';
 import {
@@ -264,14 +265,14 @@ export default function LuGmailModule() {
           </div>
         </div>
 
-        <select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} className="h-8 min-w-[180px] rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs font-medium outline-none focus:border-[var(--color-accent)] focus:bg-white">
-          <option value="all">All connected Gmail</option>
-          {accounts.map((account) => (
-            <option key={account.accountId} value={account.accountId}>
-              {account.email}{account.needsReconnect ? ' (Reconnect)' : ''}
-            </option>
-          ))}
-        </select>
+        <GoogleAccountDropdown
+          accounts={accounts}
+          value={accountFilter}
+          allLabel="All connected Gmail"
+          connecting={connecting}
+          onChange={setAccountFilter}
+          onConnect={connectAccount}
+        />
 
         <select value={labelId} onChange={(event) => setLabelId(event.target.value)} className="h-8 min-w-[120px] rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] px-2 text-xs font-medium outline-none focus:border-[var(--color-accent)] focus:bg-white">
           {visibleLabels.map((label) => (
@@ -299,10 +300,6 @@ export default function LuGmailModule() {
           </button>
         )}
 
-        <button type="button" onClick={connectAccount} disabled={connecting} className="flex h-8 items-center gap-1.5 rounded-lg bg-[var(--color-text-primary)] px-3 text-xs font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-50">
-          <Icon name="plus" size={13} />
-          {connecting ? 'Connecting' : 'Connect account'}
-        </button>
       </header>
 
       {(status || error || reconnectAccounts.length > 0) && (
