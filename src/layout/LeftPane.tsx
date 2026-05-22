@@ -138,11 +138,13 @@ export default function LeftPane() {
         const mod = moduleRegistry.get(tab.moduleId);
         return {
           tab,
+          mod,
           manifest: mod?.manifest,
           source: mod?.source,
+          importedMod: importedModuleMap.get(tab.moduleId) ?? null,
         };
       }),
-    [registryVersion, tabs],
+    [importedModuleMap, registryVersion, tabs],
   );
 
   useEffect(() => {
@@ -409,16 +411,23 @@ export default function LeftPane() {
 
       <div className="flex-1 overflow-y-auto px-1.5 py-1">
         {collapsed ? (
-          openTabItems.map(({ tab, manifest, source }) => (
+          openTabItems.map(({ tab, mod, manifest, source, importedMod }) => (
             <OpenModuleCard
               key={tab.moduleId}
               tab={tab}
+              mod={mod}
               manifest={manifest}
               source={source}
+              isPinned={pinnedModuleIds.includes(tab.moduleId)}
+              importedMod={importedMod}
               collapsed
               active={tab.moduleId === activeTabId}
               isDragging={draggedTabId === tab.moduleId}
               onOpen={() => setActiveTab(tab.moduleId)}
+              onOpenNewWindow={() => mod && handleOpenModuleInNewWindow(mod)}
+              onTogglePin={() => togglePin(tab.moduleId)}
+              onEdit={() => mod && handleEditModule(mod, importedMod)}
+              onDelete={() => handleDeleteModule(tab.moduleId)}
               onClose={() => closeTab(tab.moduleId)}
               onDragStart={() => setDraggedTabId(tab.moduleId)}
               onDragEnd={() => setDraggedTabId(null)}
@@ -465,15 +474,22 @@ export default function LeftPane() {
               </div>
             ) : null}
 
-            {openTabItems.map(({ tab, manifest, source }) => (
+            {openTabItems.map(({ tab, mod, manifest, source, importedMod }) => (
               <OpenModuleCard
                 key={tab.moduleId}
                 tab={tab}
+                mod={mod}
                 manifest={manifest}
                 source={source}
+                isPinned={pinnedModuleIds.includes(tab.moduleId)}
+                importedMod={importedMod}
                 active={tab.moduleId === activeTabId}
                 isDragging={draggedTabId === tab.moduleId}
                 onOpen={() => setActiveTab(tab.moduleId)}
+                onOpenNewWindow={() => mod && handleOpenModuleInNewWindow(mod)}
+                onTogglePin={() => togglePin(tab.moduleId)}
+                onEdit={() => mod && handleEditModule(mod, importedMod)}
+                onDelete={() => handleDeleteModule(tab.moduleId)}
                 onClose={() => closeTab(tab.moduleId)}
                 onDragStart={() => setDraggedTabId(tab.moduleId)}
                 onDragEnd={() => setDraggedTabId(null)}
@@ -555,12 +571,19 @@ export default function LeftPane() {
 
 interface OpenModuleCardProps {
   tab: TabItem;
+  mod?: SidebarModule;
   manifest?: ModuleManifest;
   source?: RegisteredModule['source'];
+  isPinned: boolean;
+  importedMod: ImportedModule | null;
   active: boolean;
   collapsed?: boolean;
   isDragging: boolean;
   onOpen: () => void;
+  onOpenNewWindow: () => void;
+  onTogglePin: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
   onClose: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -569,23 +592,48 @@ interface OpenModuleCardProps {
 
 function OpenModuleCard({
   tab,
+  mod,
   manifest,
   source,
+  isPinned,
+  importedMod,
   active,
   collapsed = false,
   isDragging,
   onOpen,
+  onOpenNewWindow,
+  onTogglePin,
+  onEdit,
+  onDelete,
   onClose,
   onDragStart,
   onDragEnd,
   onDrop,
 }: OpenModuleCardProps) {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const isImported = importedMod != null;
   const iconToneClass = source === 'native' ? 'module-icon-native' : '';
+
+  const stopCardAction = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
 
   const isCardAction = (target: EventTarget | null) => {
     return target instanceof HTMLElement && target.closest('[data-open-card-action]') != null;
   };
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+
+    if (dropdownOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropdownOpen]);
 
   const handleDragStart = (event: DragEvent) => {
     if (isCardAction(event.target)) {
@@ -678,20 +726,90 @@ function OpenModuleCard({
           {manifest?.description ?? 'Open module'}
         </p>
       </div>
-      <button
-        type="button"
+      <div
         data-open-card-action
-        onClick={(event) => {
-          event.stopPropagation();
-          onClose();
-        }}
-        className={`w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)] transition-all cursor-pointer ${
-          active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        className={`flex flex-shrink-0 items-center gap-0.5 transition-all ${
+          active || dropdownOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
-        title="Close module"
+        onMouseDown={stopCardAction}
+        onPointerDown={stopCardAction}
       >
-        <Icon name="x" size={12} />
-      </button>
+        <div className="relative" ref={dropdownRef}>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setDropdownOpen((open) => !open);
+            }}
+            onMouseDown={stopCardAction}
+            className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)]"
+            title="More options"
+            aria-label="More options"
+          >
+            <Icon name="more-horizontal" size={12} />
+          </button>
+          {dropdownOpen && (
+            <div
+              className="absolute top-full right-0 z-50 mt-1 w-48 rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg"
+              onMouseDown={stopCardAction}
+              onClick={stopCardAction}
+            >
+              <DropdownItem
+                icon="pin"
+                label={isPinned ? 'Unpin' : 'Pin'}
+                onClick={() => {
+                  setDropdownOpen(false);
+                  onTogglePin();
+                }}
+              />
+              <DropdownItem
+                icon="external-link"
+                label="Open in New Window"
+                onClick={() => {
+                  setDropdownOpen(false);
+                  onOpenNewWindow();
+                }}
+              />
+              {mod && (
+                <DropdownItem
+                  icon="edit"
+                  label="Edit"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onEdit();
+                  }}
+                />
+              )}
+              {isImported && (
+                <>
+                  <div className="mx-2 my-1 border-b border-[var(--color-border-subtle)]" />
+                  <DropdownItem
+                    icon="trash"
+                    label="Delete"
+                    danger
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      onDelete();
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)]"
+          title="Close module"
+          aria-label="Close module"
+        >
+          <Icon name="x" size={12} />
+        </button>
+      </div>
     </div>
   );
 }

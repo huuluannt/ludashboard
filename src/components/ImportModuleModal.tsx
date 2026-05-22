@@ -7,6 +7,7 @@ import { useSidebarStore } from '@/state/sidebarStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import type { ModuleManifest } from '@/modules/moduleTypes';
 import { applyModuleOverride, registerImportedModule } from '@/modules/registryRuntime';
+import { getCustomIconLibrary } from '@/lib/customIconLibrary';
 import Icon, { availableIcons } from './Icon';
 
 const MAX_ICON_SIZE = 512 * 1024;
@@ -46,6 +47,7 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
 
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [iconUploadError, setIconUploadError] = useState('');
+  const [customIcons, setCustomIcons] = useState(() => getCustomIconLibrary());
   const iconPickerRef = useRef<HTMLDivElement>(null);
   const iconFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -58,6 +60,16 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
     if (showIconPicker) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showIconPicker]);
+
+  useEffect(() => {
+    const refreshCustomIcons = () => setCustomIcons(getCustomIconLibrary());
+    window.addEventListener('storage', refreshCustomIcons);
+    window.addEventListener('ludashboard:custom-icons-changed', refreshCustomIcons);
+    return () => {
+      window.removeEventListener('storage', refreshCustomIcons);
+      window.removeEventListener('ludashboard:custom-icons-changed', refreshCustomIcons);
+    };
+  }, []);
 
   const handleIconUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -238,6 +250,27 @@ export default function ImportModuleModal({ onClose, editingModule }: ImportModu
                     >
                       <Icon name={icon} size={20} />
                     </button>
+                  )}
+                  {customIcons.length > 0 && (
+                    <div className="col-span-8 grid grid-cols-8 gap-1 border-b border-[var(--color-border-subtle)] pb-1 mb-1">
+                      {customIcons.map((customIcon) => (
+                        <button
+                          key={customIcon.id}
+                          type="button"
+                          onClick={() => {
+                            setIcon(customIcon.dataUrl);
+                            setShowIconPicker(false);
+                          }}
+                          className={`
+                            w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer transition-colors border
+                            ${icon === customIcon.dataUrl ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)]' : 'hover:bg-[var(--color-surface-subtle)] text-[var(--color-text-secondary)] border-[var(--color-border-subtle)]'}
+                          `}
+                          title={customIcon.name}
+                        >
+                          <Icon name={customIcon.dataUrl} size={20} />
+                        </button>
+                      ))}
+                    </div>
                   )}
                   {availableIcons.map((i) => (
                     <button

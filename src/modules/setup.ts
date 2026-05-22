@@ -53,6 +53,9 @@ import { manifest as luClassroomManifest } from './luclassroom/manifest';
 import LuDichModule from './ludich/index';
 import { manifest as luDichManifest } from './ludich/manifest';
 
+import LuIconModule from './luicon/index';
+import { manifest as luIconManifest } from './luicon/manifest';
+
 import LuAnhModule from './luanh/index';
 import { manifest as luAnhManifest } from './luanh/manifest';
 
@@ -99,6 +102,7 @@ export function setupModules() {
     { manifest: luCalendarManifest, component: LuCalendarModule, source: 'native' },
     { manifest: luClassroomManifest, component: LuClassroomModule, source: 'native' },
     { manifest: luDichManifest, component: LuDichModule, source: 'native' },
+    { manifest: luIconManifest, component: LuIconModule, source: 'native' },
     { manifest: luAnhManifest, component: LuAnhModule, source: 'native' },
     { manifest: luKeepManifest, component: LuKeepModule, source: 'native' },
     { manifest: luDanhbaManifest, component: LuDanhbaModule, source: 'native' },
