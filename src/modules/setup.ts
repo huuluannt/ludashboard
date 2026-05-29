@@ -44,6 +44,12 @@ import { manifest as lugeminiManifest } from './lugemini/manifest';
 import CloudStorageModule from './cloud-storage/index';
 import { manifest as cloudStorageManifest } from './cloud-storage/manifest';
 
+import UnitConverterModule from './unit-converter/index';
+import { manifest as unitConverterManifest } from './unit-converter/manifest';
+
+import WorldClockModule from './world-clock/index';
+import { manifest as worldClockManifest } from './world-clock/manifest';
+
 import LuCalendarModule from './lucalendar/index';
 import { manifest as luCalendarManifest } from './lucalendar/manifest';
 
@@ -58,9 +64,6 @@ import { manifest as luIconManifest } from './luicon/manifest';
 
 import LuAnhModule from './luanh/index';
 import { manifest as luAnhManifest } from './luanh/manifest';
-
-import LuKeepModule from './lukeep/index';
-import { manifest as luKeepManifest } from './lukeep/manifest';
 
 import LuDanhbaModule from './ludanhba/index';
 import { manifest as luDanhbaManifest } from './ludanhba/manifest';
@@ -99,12 +102,13 @@ export function setupModules() {
     { manifest: luchatManifest, component: LuChatModule, source: 'native' },
     { manifest: lugeminiManifest, component: LuGeminiModule, source: 'native' },
     { manifest: cloudStorageManifest, component: CloudStorageModule, source: 'native' },
+    { manifest: unitConverterManifest, component: UnitConverterModule, source: 'native' },
+    { manifest: worldClockManifest, component: WorldClockModule, source: 'native' },
     { manifest: luCalendarManifest, component: LuCalendarModule, source: 'native' },
     { manifest: luClassroomManifest, component: LuClassroomModule, source: 'native' },
     { manifest: luDichManifest, component: LuDichModule, source: 'native' },
     { manifest: luIconManifest, component: LuIconModule, source: 'native' },
     { manifest: luAnhManifest, component: LuAnhModule, source: 'native' },
-    { manifest: luKeepManifest, component: LuKeepModule, source: 'native' },
     { manifest: luDanhbaManifest, component: LuDanhbaModule, source: 'native' },
     { manifest: luGmailManifest, component: LuGmailModule, source: 'native' },
     { manifest: luDriveManifest, component: LuDriveModule, source: 'native' },

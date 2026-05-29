@@ -37,14 +37,6 @@ export const GOOGLE_WORKSPACE_APPS = {
     sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
     scopes: ['openid', 'email', 'https://www.googleapis.com/auth/photospicker.mediaitems.readonly'],
   },
-  keep: {
-    appName: 'LuKeep',
-    callbackPath: '/api/keep/callback',
-    redirectEnv: 'GOOGLE_KEEP_REDIRECT_URI',
-    sharedCallbackPath: '/api/gmail/callback',
-    sharedRedirectEnv: 'GOOGLE_GMAIL_REDIRECT_URI',
-    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/keep'],
-  },
   contacts: {
     appName: 'LuDanhba',
     callbackPath: '/api/contacts/callback',

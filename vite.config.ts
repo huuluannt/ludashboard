@@ -9,7 +9,6 @@ import classroomApiHandler from './api/classroom/[...path].js';
 import contactsApiHandler from './api/contacts/[...path].js';
 import driveApiHandler from './api/drive/[...path].js';
 import gmailApiHandler from './api/gmail/[...path].js';
-import keepApiHandler from './api/keep/[...path].js';
 import musicApiHandler from './api/music/[...path].js';
 import oneDriveApiHandler from './api/onedrive/[...path].js';
 import photosApiHandler from './api/photos/[...path].js';
@@ -56,10 +55,6 @@ export default defineConfig(({ mode }) => {
           }
           if (pathname?.startsWith('/api/gmail/')) {
             await gmailApiHandler(req, res);
-            return;
-          }
-          if (pathname?.startsWith('/api/keep/')) {
-            await keepApiHandler(req, res);
             return;
           }
           if (pathname?.startsWith('/api/music/')) {

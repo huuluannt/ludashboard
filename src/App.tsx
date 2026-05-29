@@ -11,7 +11,6 @@ import { moduleRegistry } from '@/modules/moduleRegistry';
 import { createTabFromModule } from '@/modules/openModule';
 import { syncRegistryWithModuleStore } from '@/modules/registryRuntime';
 import AppShell from '@/app/AppShell';
-import InstallPrompt from '@/components/InstallPrompt';
 import OfflineIndicator from '@/components/OfflineIndicator';
 import UpdatePrompt from '@/components/UpdatePrompt';
 import SyncIndicator from '@/components/SyncIndicator';
@@ -46,6 +45,7 @@ export default function App() {
     ]).then(() => {
       const moduleState = useModuleStore.getState();
       syncRegistryWithModuleStore(moduleState.importedModules, moduleState.moduleOverrides);
+      pruneMissingModuleReferences();
 
       const requestedModuleId = new URLSearchParams(window.location.search).get('module');
       if (requestedModuleId) {
@@ -82,9 +82,32 @@ export default function App() {
       <AppShell />
       {/* PWA overlays */}
       <UpdatePrompt />
-      <InstallPrompt />
       <OfflineIndicator />
       <SyncIndicator />
     </>
   );
+}
+
+function pruneMissingModuleReferences() {
+  const tabState = useTabStore.getState();
+  const sidebarState = useSidebarStore.getState();
+  const missingIds = new Set<string>();
+
+  tabState.tabs.forEach((tab) => {
+    if (!moduleRegistry.has(tab.moduleId)) missingIds.add(tab.moduleId);
+  });
+  sidebarState.pinnedModuleIds.forEach((id) => {
+    if (!moduleRegistry.has(id)) missingIds.add(id);
+  });
+  sidebarState.moduleOrderIds.forEach((id) => {
+    if (!moduleRegistry.has(id)) missingIds.add(id);
+  });
+  if (sidebarState.pickedModuleId && !moduleRegistry.has(sidebarState.pickedModuleId)) {
+    missingIds.add(sidebarState.pickedModuleId);
+  }
+
+  missingIds.forEach((id) => {
+    tabState.closeTab(id);
+    sidebarState.removeModuleReferences(id);
+  });
 }

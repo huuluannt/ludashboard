@@ -7,7 +7,6 @@ const APP_PREFIX_ENV = {
   drive: 'LUDRIVE_REDIS_PREFIX',
   classroom: 'LUCLASSROOM_REDIS_PREFIX',
   photos: 'LUANH_REDIS_PREFIX',
-  keep: 'LUKEEP_REDIS_PREFIX',
   contacts: 'LUDANHBA_REDIS_PREFIX',
 };
 const APP_DEFAULT_PREFIX = {
@@ -15,7 +14,6 @@ const APP_DEFAULT_PREFIX = {
   drive: 'ludashboard:ludrive',
   classroom: 'ludashboard:luclassroom',
   photos: 'ludashboard:luanh',
-  keep: 'ludashboard:lukeep',
   contacts: 'ludashboard:ludanhba',
 };
 

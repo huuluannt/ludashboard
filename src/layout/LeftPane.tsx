@@ -286,8 +286,9 @@ export default function LeftPane() {
       className={`
         sidebar-transition flex flex-col h-full
         bg-[var(--color-surface-subtle)] border-r border-[var(--color-border-subtle)]
-        select-none flex-shrink-0
+        select-none flex-shrink-0 max-md:fixed max-md:left-0 max-md:top-0 max-md:bottom-0 max-md:z-50 max-md:transition-transform max-md:duration-200
         ${collapsed ? 'overflow-visible' : 'overflow-hidden'}
+        ${collapsed ? 'max-md:-translate-x-full max-md:pointer-events-none' : 'max-md:translate-x-0 max-md:shadow-2xl'}
       `}
       style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
     >

@@ -8,16 +8,6 @@ import type { ModuleManifest } from './moduleTypes';
 
 export const placeholderManifests: ModuleManifest[] = [
   {
-    id: 'unit-converter',
-    title: 'Unit Converter',
-    icon: 'ruler',
-    version: '0.0.0',
-    category: 'Utilities',
-    description: 'Convert between units of measurement',
-    offline: true,
-    permissions: [],
-  },
-  {
     id: 'cloud-storage',
     title: 'Cloud Storage',
     icon: 'cloud',
@@ -26,15 +16,5 @@ export const placeholderManifests: ModuleManifest[] = [
     description: 'Access your cloud files',
     offline: false,
     permissions: ['network'],
-  },
-  {
-    id: 'world-clock',
-    title: 'World Clock',
-    icon: 'globe',
-    version: '0.0.0',
-    category: 'Utilities',
-    description: 'Track time across timezones',
-    offline: true,
-    permissions: [],
   },
 ];

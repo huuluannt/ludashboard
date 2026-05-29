@@ -16,7 +16,9 @@ export default function TopRightPane() {
   const openTab = useTabStore((s) => s.openTab);
   const importedModules = useModuleStore((s) => s.importedModules);
   const registryVersion = useModuleStore((s) => s.registryVersion);
+  const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const pinnedModuleIds = useSidebarStore((s) => s.pinnedModuleIds);
+  const setSidebarCollapsed = useSidebarStore((s) => s.setCollapsed);
   const rightSidebarVisible = useRightSidebarStore((s) => s.visible);
   const toggleRightSidebar = useRightSidebarStore((s) => s.toggleVisible);
   const rightCornerVisible = useRightCornerSidebarStore((s) => s.visible);
@@ -97,7 +99,22 @@ export default function TopRightPane() {
   };
 
   return (
-    <div className="top-right-toolbar h-10 min-h-[40px] flex items-center gap-1.5 bg-[var(--color-surface-subtle)] border-b border-[var(--color-border-subtle)] px-3 select-none relative">
+    <div
+      className={`top-right-toolbar h-10 min-h-[40px] flex items-center gap-1.5 bg-[var(--color-surface-subtle)] border-b border-[var(--color-border-subtle)] px-3 select-none relative ${
+        sidebarCollapsed ? 'is-mobile-sidebar-hidden' : ''
+      }`}
+    >
+      {sidebarCollapsed && (
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(false)}
+          className="mobile-sidebar-open-button h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] shadow-sm transition-colors hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-text-primary)]"
+          title="Open sidebar"
+          aria-label="Open sidebar"
+        >
+          <Icon name="chevron-right" size={17} />
+        </button>
+      )}
       <GlobalModuleSearch />
 
       <div
