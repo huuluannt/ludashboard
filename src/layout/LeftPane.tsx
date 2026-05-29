@@ -60,7 +60,8 @@ export default function LeftPane() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [selectedFilterIndex, setSelectedFilterIndex] = useState(0);
   const [showAllModules, setShowAllModules] = useState(false);
-  const [time, setTime] = useState('');
+  const [dateStamp, setDateStamp] = useState('');
+  const [timeDetail, setTimeDetail] = useState('');
 
   useEffect(() => {
     const updateTime = () => {
@@ -70,7 +71,8 @@ export default function LeftPane() {
       const dd = now.getDate().toString().padStart(2, '0');
       const hh = now.getHours().toString().padStart(2, '0');
       const min = now.getMinutes().toString().padStart(2, '0');
-      setTime(`${yy}${mm}${dd} ${VIETNAMESE_DAYS[now.getDay()]} ${hh}:${min}`);
+      setDateStamp(`${yy}${mm}${dd}`);
+      setTimeDetail(`${VIETNAMESE_DAYS[now.getDay()]} ${hh}:${min}`);
     };
 
     updateTime();
@@ -292,12 +294,12 @@ export default function LeftPane() {
               <div className="w-8 h-8 rounded-xl bg-[var(--color-accent)] flex items-center justify-center flex-shrink-0">
                 <Icon name="boxes" size={21} className="text-white" strokeWidth={2.35} />
               </div>
-              <div className="flex flex-col text-left min-w-0">
-                <span className="text-sm font-semibold text-[var(--color-text-primary)] whitespace-nowrap overflow-hidden">
-                  LuDashboard
+              <div className="flex h-8 flex-col justify-center text-left min-w-0">
+                <span className="text-base leading-4 font-semibold text-[var(--color-text-primary)] tracking-[0.08em] font-mono whitespace-nowrap overflow-hidden">
+                  {dateStamp}
                 </span>
-                <span className="text-[10px] text-[var(--color-accent)] tracking-widest font-mono">
-                  {time}
+                <span className="mt-0.5 text-[10px] leading-3 text-[var(--color-accent)] tracking-widest font-mono whitespace-nowrap overflow-hidden">
+                  {timeDetail}
                 </span>
               </div>
             </button>
