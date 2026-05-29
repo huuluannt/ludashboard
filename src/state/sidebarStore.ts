@@ -5,6 +5,7 @@ interface SidebarStore {
   collapsed: boolean;
   searchQuery: string;
   pinnedModuleIds: string[];
+  pickedModuleId: string | null;
   moduleOrderIds: string[];
   _hydrated: boolean;
 
@@ -13,6 +14,7 @@ interface SidebarStore {
   setCollapsed: (collapsed: boolean) => void;
   setSearchQuery: (q: string) => void;
   togglePin: (moduleId: string) => void;
+  setPickedModule: (moduleId: string | null) => void;
   setModuleOrder: (moduleIds: string[]) => void;
   removeModuleReferences: (moduleId: string) => void;
   replaceModuleId: (moduleId: string, nextModuleId: string) => void;
@@ -23,14 +25,16 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
   collapsed: false,
   searchQuery: '',
   pinnedModuleIds: [],
+  pickedModuleId: null,
   moduleOrderIds: [],
   _hydrated: false,
 
   async hydrate() {
     const collapsed = await offlineStorage.getSidebarCollapsed();
     const pinnedModuleIds = await offlineStorage.getPinned();
+    const pickedModuleId = await offlineStorage.getPickedModule();
     const moduleOrderIds = await offlineStorage.getModuleOrder();
-    set({ collapsed, pinnedModuleIds, moduleOrderIds, _hydrated: true });
+    set({ collapsed, pinnedModuleIds, pickedModuleId, moduleOrderIds, _hydrated: true });
   },
 
   toggleCollapsed() {
@@ -58,6 +62,11 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
     offlineStorage.setPinned(next);
   },
 
+  setPickedModule(moduleId: string | null) {
+    set({ pickedModuleId: moduleId });
+    offlineStorage.setPickedModule(moduleId);
+  },
+
   setModuleOrder(moduleIds: string[]) {
     set({ moduleOrderIds: moduleIds });
     offlineStorage.setModuleOrder(moduleIds);
@@ -66,8 +75,10 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
   removeModuleReferences(moduleId: string) {
     const pinnedModuleIds = get().pinnedModuleIds.filter((id) => id !== moduleId);
     const moduleOrderIds = get().moduleOrderIds.filter((id) => id !== moduleId);
-    set({ pinnedModuleIds, moduleOrderIds });
+    const pickedModuleId = get().pickedModuleId === moduleId ? null : get().pickedModuleId;
+    set({ pinnedModuleIds, pickedModuleId, moduleOrderIds });
     offlineStorage.setPinned(pinnedModuleIds);
+    offlineStorage.setPickedModule(pickedModuleId);
     offlineStorage.setModuleOrder(moduleOrderIds);
   },
 
@@ -76,8 +87,10 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
       Array.from(new Set(ids.map((id) => (id === moduleId ? nextModuleId : id))));
     const pinnedModuleIds = replace(get().pinnedModuleIds);
     const moduleOrderIds = replace(get().moduleOrderIds);
-    set({ pinnedModuleIds, moduleOrderIds });
+    const pickedModuleId = get().pickedModuleId === moduleId ? nextModuleId : get().pickedModuleId;
+    set({ pinnedModuleIds, pickedModuleId, moduleOrderIds });
     offlineStorage.setPinned(pinnedModuleIds);
+    offlineStorage.setPickedModule(pickedModuleId);
     offlineStorage.setModuleOrder(moduleOrderIds);
   },
 

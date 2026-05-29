@@ -28,8 +28,10 @@ export default function LeftPane() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
   const pinnedModuleIds = useSidebarStore((s) => s.pinnedModuleIds);
+  const pickedModuleId = useSidebarStore((s) => s.pickedModuleId);
   const moduleOrderIds = useSidebarStore((s) => s.moduleOrderIds);
   const togglePin = useSidebarStore((s) => s.togglePin);
+  const setPickedModule = useSidebarStore((s) => s.setPickedModule);
   const setModuleOrder = useSidebarStore((s) => s.setModuleOrder);
   const removeModuleReferences = useSidebarStore((s) => s.removeModuleReferences);
 
@@ -95,6 +97,10 @@ export default function LeftPane() {
   const importedModuleMap = useMemo(() => new Map(importedModules.map((mod) => [mod.id, mod])), [importedModules]);
   const hasLuMusicTab = tabs.some((tab) => tab.moduleId === 'lumusic');
   const hasLuVideoTab = tabs.some((tab) => tab.moduleId === 'luvideo');
+  const pickedModule = useMemo(
+    () => (pickedModuleId ? moduleRegistry.get(pickedModuleId) ?? null : null),
+    [pickedModuleId, registryVersion],
+  );
 
   const orderedModules = useMemo(() => {
     const orderIndex = new Map(moduleOrderIds.map((id, index) => [id, index]));
@@ -120,7 +126,7 @@ export default function LeftPane() {
   );
 
   const allModulesForSidebar = useMemo(() => {
-    const combined = [...pinnedModules, ...unpinnedModules];
+    const combined = [...pinnedModules, ...unpinnedModules].filter((mod) => mod.manifest.id !== pickedModuleId);
     const query = allFilterQuery.trim();
     if (!query) return combined;
 
@@ -133,11 +139,13 @@ export default function LeftPane() {
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score || a.index - b.index)
       .map((item) => item.mod);
-  }, [allFilterQuery, pinnedModules, unpinnedModules]);
+  }, [allFilterQuery, pickedModuleId, pinnedModules, unpinnedModules]);
 
   const openTabItems = useMemo(
     () =>
-      tabs.map((tab) => {
+      tabs
+        .filter((tab) => tab.moduleId !== pickedModuleId)
+        .map((tab) => {
         const mod = moduleRegistry.get(tab.moduleId);
         return {
           tab,
@@ -147,7 +155,7 @@ export default function LeftPane() {
           importedMod: importedModuleMap.get(tab.moduleId) ?? null,
         };
       }),
-    [importedModuleMap, registryVersion, tabs],
+    [importedModuleMap, pickedModuleId, registryVersion, tabs],
   );
 
   useEffect(() => {
@@ -275,11 +283,12 @@ export default function LeftPane() {
 
   return (
     <aside
-      className="
+      className={`
         sidebar-transition flex flex-col h-full
         bg-[var(--color-surface-subtle)] border-r border-[var(--color-border-subtle)]
-        select-none overflow-hidden flex-shrink-0
-      "
+        select-none flex-shrink-0
+        ${collapsed ? 'overflow-visible' : 'overflow-hidden'}
+      `}
       style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
     >
       <div className={`flex items-center h-14 px-3 gap-2.5 flex-shrink-0 ${collapsed ? 'justify-center' : ''}`}>
@@ -365,6 +374,34 @@ export default function LeftPane() {
         </div>
       )}
 
+      {collapsed && (
+        <CollapsedImportActions
+          onImportUrl={() => {
+            setEditingModule(null);
+            setImportPreset('url');
+            setImportModalOpen(true);
+          }}
+          onImportPanel={() => {
+            setEditingModule(null);
+            setImportPreset('panel');
+            setImportModalOpen(true);
+          }}
+        />
+      )}
+
+      <PickedModuleSlot
+        mod={pickedModule}
+        collapsed={collapsed}
+        active={pickedModuleId === activeTabId}
+        onOpen={() => {
+          if (pickedModule) handleOpenModule(pickedModule);
+        }}
+        onOpenNewWindow={() => {
+          if (pickedModule) handleOpenModuleInNewWindow(pickedModule);
+        }}
+        onClearPick={() => setPickedModule(null)}
+      />
+
       {!collapsed && (
         <div className="flex-shrink-0 px-1.5 py-1">
           <div className="flex items-center px-2 pb-2 pt-2">
@@ -432,7 +469,7 @@ export default function LeftPane() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-1.5 py-1">
+      <div className={`flex-1 px-1.5 py-1 ${collapsed ? 'relative z-30 overflow-visible' : 'overflow-y-auto'}`}>
         {collapsed ? (
           openTabItems.map(({ tab, mod, manifest, source, importedMod }) => (
             <OpenModuleCard
@@ -449,6 +486,7 @@ export default function LeftPane() {
               onOpen={() => setActiveTab(tab.moduleId)}
               onOpenNewWindow={() => mod && handleOpenModuleInNewWindow(mod)}
               onTogglePin={() => togglePin(tab.moduleId)}
+              onPick={() => setPickedModule(tab.moduleId)}
               onEdit={() => mod && handleEditModule(mod, importedMod)}
               onDelete={() => handleDeleteModule(tab.moduleId)}
               onClose={() => closeTab(tab.moduleId)}
@@ -479,6 +517,7 @@ export default function LeftPane() {
                 onOpen={() => handleOpenModule(mod)}
                 onOpenNewWindow={() => handleOpenModuleInNewWindow(mod)}
                 onTogglePin={() => togglePin(mod.manifest.id)}
+                onPick={() => setPickedModule(mod.manifest.id)}
                 onDragStart={() => setDraggedModuleId(mod.manifest.id)}
                 onDragEnd={() => setDraggedModuleId(null)}
                 onDrop={() => handleReorderModules(mod.manifest.id)}
@@ -511,6 +550,7 @@ export default function LeftPane() {
                 onOpen={() => setActiveTab(tab.moduleId)}
                 onOpenNewWindow={() => mod && handleOpenModuleInNewWindow(mod)}
                 onTogglePin={() => togglePin(tab.moduleId)}
+                onPick={() => setPickedModule(tab.moduleId)}
                 onEdit={() => mod && handleEditModule(mod, importedMod)}
                 onDelete={() => handleDeleteModule(tab.moduleId)}
                 onClose={() => closeTab(tab.moduleId)}
@@ -609,12 +649,209 @@ interface OpenModuleCardProps {
   onOpen: () => void;
   onOpenNewWindow: () => void;
   onTogglePin: () => void;
+  onPick: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
   onDrop: () => void;
+}
+
+function PickedModuleSlot({
+  mod,
+  collapsed,
+  active,
+  onOpen,
+  onOpenNewWindow,
+  onClearPick,
+}: {
+  mod: SidebarModule | null;
+  collapsed: boolean;
+  active: boolean;
+  onOpen: () => void;
+  onOpenNewWindow: () => void;
+  onClearPick: () => void;
+}) {
+  const iconToneClass = getModuleIconToneClass(mod?.source);
+
+  if (collapsed) {
+    return (
+      <div className="relative z-40 px-1.5 pb-1">
+        <div className="group/collapsed-picked relative w-full rounded-xl">
+          <button
+            type="button"
+            disabled={!mod}
+            onClick={onOpen}
+            title={mod?.manifest.title ?? 'Picked module'}
+            aria-label={mod?.manifest.title ?? 'Picked module'}
+            className={`
+              module-card flex w-full items-center justify-center rounded-xl py-2
+              ${mod ? 'cursor-pointer' : 'cursor-default opacity-55'}
+            `}
+          >
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-lg border shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${iconToneClass} ${
+                active && iconToneClass ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface-subtle)]' : ''
+              } ${
+                mod
+                  ? active
+                    ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white'
+                    : 'bg-white border-[var(--color-border-subtle)] text-[var(--color-text-secondary)]'
+                  : 'border-dashed border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'
+              }`}
+            >
+              <Icon name={mod?.manifest.icon ?? 'pin'} size={20} />
+            </div>
+          </button>
+          {mod && (
+            <div
+              className="
+                pointer-events-none absolute left-[calc(100%-2px)] top-1/2 z-50 flex -translate-y-1/2 items-center gap-1
+                rounded-xl border border-[var(--color-border-subtle)] bg-white p-1 shadow-lg
+                invisible opacity-0 translate-x-1 transition-all duration-150
+                group-hover/collapsed-picked:visible group-hover/collapsed-picked:pointer-events-auto group-hover/collapsed-picked:translate-x-0 group-hover/collapsed-picked:opacity-100
+                group-focus-within/collapsed-picked:visible group-focus-within/collapsed-picked:pointer-events-auto group-focus-within/collapsed-picked:translate-x-0 group-focus-within/collapsed-picked:opacity-100
+              "
+            >
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onClearPick();
+                }}
+                className="
+                  flex h-7 w-7 items-center justify-center rounded-lg
+                  text-[var(--color-text-secondary)] transition-colors
+                  hover:bg-red-50 hover:text-[var(--color-danger)]
+                "
+                title="Remove picked module"
+                aria-label="Remove picked module"
+              >
+                <Icon name="x" size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenNewWindow();
+                }}
+                className="
+                  flex h-7 w-7 items-center justify-center rounded-lg
+                  text-[var(--color-text-secondary)] transition-colors
+                  hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]
+                "
+                title="Open in New Window"
+                aria-label="Open in New Window"
+              >
+                <Icon name="external-link" size={13} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-3 pb-2">
+      <div
+        role={mod ? 'button' : undefined}
+        tabIndex={mod ? 0 : undefined}
+        onClick={mod ? onOpen : undefined}
+        onKeyDown={(event) => {
+          if (!mod) return;
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onOpen();
+          }
+        }}
+        className={`
+          module-card flex h-11 items-center gap-2.5 rounded-xl border px-2 transition-all
+          ${mod ? 'cursor-pointer border-[var(--color-border-subtle)] bg-white shadow-sm hover:bg-white/80' : 'border-dashed border-[var(--color-border)] bg-white/60'}
+          ${active ? 'ring-1 ring-black/15' : ''}
+        `}
+      >
+        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border ${iconToneClass} ${
+          mod ? 'border-[var(--color-border-subtle)] bg-white text-[var(--color-text-secondary)]' : 'border-dashed border-[var(--color-border)] bg-white text-[var(--color-text-tertiary)]'
+        }`}>
+          <Icon name={mod?.manifest.icon ?? 'pin'} size={19} />
+        </div>
+        <div className="min-w-0 flex-1 text-left">
+          <p className="truncate text-xs font-semibold text-[var(--color-text-primary)]">{mod?.manifest.title ?? 'Pick Module'}</p>
+          <p className="truncate text-[10px] text-[var(--color-text-tertiary)]">{mod?.manifest.description ?? 'Placeholder'}</p>
+        </div>
+        {mod && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenNewWindow();
+            }}
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+            title="Open in New Window"
+            aria-label="Open in New Window"
+          >
+            <Icon name="external-link" size={13} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CollapsedImportActions({
+  onImportUrl,
+  onImportPanel,
+}: {
+  onImportUrl: () => void;
+  onImportPanel: () => void;
+}) {
+  return (
+    <div className="relative z-40 px-1.5 pb-1">
+      <div className="group/collapsed-import relative w-full rounded-xl">
+        <button
+          type="button"
+          onClick={onImportUrl}
+          title="Import URL"
+          aria-label="Import URL"
+          className="module-card flex w-full items-center justify-center rounded-xl py-2"
+        >
+          <div
+            className="
+              flex h-8 w-8 items-center justify-center rounded-lg border border-dashed border-[var(--color-border)]
+              bg-white text-[var(--color-text-secondary)] shadow-[0_1px_2px_rgba(0,0,0,0.04)]
+              transition-colors group-hover/collapsed-import:border-[var(--color-accent)] group-hover/collapsed-import:text-[var(--color-accent)]
+            "
+          >
+            <Icon name="plus" size={18} />
+          </div>
+        </button>
+        <div
+          className="
+            pointer-events-none absolute left-[calc(100%-2px)] top-1/2 z-50 flex -translate-y-1/2 items-center gap-1
+            rounded-xl border border-blue-100 bg-white p-1 shadow-lg
+            invisible opacity-0 translate-x-1 transition-all duration-150
+            group-hover/collapsed-import:visible group-hover/collapsed-import:pointer-events-auto group-hover/collapsed-import:translate-x-0 group-hover/collapsed-import:opacity-100
+            group-focus-within/collapsed-import:visible group-focus-within/collapsed-import:pointer-events-auto group-focus-within/collapsed-import:translate-x-0 group-focus-within/collapsed-import:opacity-100
+          "
+        >
+          <button
+            type="button"
+            onClick={onImportPanel}
+            className="
+              flex h-7 w-7 items-center justify-center rounded-lg
+              bg-blue-50 text-blue-700 transition-colors hover:bg-blue-100
+            "
+            title="Import Panel"
+            aria-label="Import Panel"
+          >
+            <Icon name="layout-panel-top" size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function OpenModuleCard({
@@ -630,6 +867,7 @@ function OpenModuleCard({
   onOpen,
   onOpenNewWindow,
   onTogglePin,
+  onPick,
   onEdit,
   onDelete,
   onClose,
@@ -694,32 +932,83 @@ function OpenModuleCard({
 
   if (collapsed) {
     return (
-      <button
-        type="button"
-        draggable
-        onDragStart={handleDragStart}
+      <div
+        className={`group/collapsed-tab relative w-full rounded-xl ${
+          isDragging ? 'opacity-45' : ''
+        } ${dragOver ? 'bg-[var(--color-surface-muted)]' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onDragEnd={handleDragEnd}
-        onClick={onOpen}
-        title={tab.title}
-        className={`w-full flex items-center justify-center py-2 rounded-xl module-card cursor-grab active:cursor-grabbing ${
-          isDragging ? 'opacity-45' : ''
-        } ${dragOver ? 'bg-[var(--color-surface-muted)]' : ''}`}
       >
-        <div
-          className={`w-8 h-8 rounded-lg border flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${iconToneClass} ${
-            active && iconToneClass ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface-subtle)]' : ''
-          } ${
-            active
-              ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white'
-              : 'bg-white border-[var(--color-border-subtle)] text-[var(--color-text-secondary)]'
-          }`}
+        <button
+          type="button"
+          draggable
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onClick={onOpen}
+          title={tab.title}
+          className="module-card flex w-full cursor-grab items-center justify-center rounded-xl py-2 active:cursor-grabbing"
         >
-          <Icon name={tab.icon} size={20} />
+          <div
+            className={`w-8 h-8 rounded-lg border flex items-center justify-center shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${iconToneClass} ${
+              active && iconToneClass ? 'ring-2 ring-[var(--color-accent)] ring-offset-1 ring-offset-[var(--color-surface-subtle)]' : ''
+            } ${
+              active
+                ? 'bg-[var(--color-text-primary)] border-[var(--color-text-primary)] text-white'
+                : 'bg-white border-[var(--color-border-subtle)] text-[var(--color-text-secondary)]'
+            }`}
+          >
+            <Icon name={tab.icon} size={20} />
+          </div>
+        </button>
+        <div
+          data-open-card-action
+          className="
+            pointer-events-none absolute left-[calc(100%-2px)] top-1/2 z-50 flex -translate-y-1/2 items-center gap-1
+            rounded-xl border border-[var(--color-border-subtle)] bg-white p-1 shadow-lg
+            invisible opacity-0 translate-x-1 transition-all duration-150
+            group-hover/collapsed-tab:visible group-hover/collapsed-tab:pointer-events-auto group-hover/collapsed-tab:translate-x-0 group-hover/collapsed-tab:opacity-100
+            group-focus-within/collapsed-tab:visible group-focus-within/collapsed-tab:pointer-events-auto group-focus-within/collapsed-tab:translate-x-0 group-focus-within/collapsed-tab:opacity-100
+          "
+          onMouseDown={stopCardAction}
+          onPointerDown={stopCardAction}
+        >
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onClose();
+            }}
+            className="
+              flex h-7 w-7 items-center justify-center rounded-lg
+              text-[var(--color-text-secondary)] transition-colors
+              hover:bg-red-50 hover:text-[var(--color-danger)]
+            "
+            title="Close module"
+            aria-label="Close module"
+          >
+            <Icon name="x" size={13} />
+          </button>
+          <button
+            type="button"
+            disabled={!mod}
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenNewWindow();
+            }}
+            className="
+              flex h-7 w-7 items-center justify-center rounded-lg
+              text-[var(--color-text-secondary)] transition-colors
+              hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]
+              disabled:cursor-not-allowed disabled:opacity-40
+            "
+            title="Open in New Window"
+            aria-label="Open in New Window"
+          >
+            <Icon name="external-link" size={13} />
+          </button>
         </div>
-      </button>
+      </div>
     );
   }
 
@@ -807,6 +1096,16 @@ function OpenModuleCard({
                   }}
                 />
               )}
+              {mod && (
+                <DropdownItem
+                  icon="pin"
+                  label="Pick"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onPick();
+                  }}
+                />
+              )}
               {isImported && (
                 <>
                   <div className="mx-2 my-1 border-b border-[var(--color-border-subtle)]" />
@@ -851,6 +1150,7 @@ interface ModuleCardProps {
   onOpen: () => void;
   onOpenNewWindow: () => void;
   onTogglePin: () => void;
+  onPick: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
   onDrop: () => void;
@@ -868,6 +1168,7 @@ function ModuleCard({
   onOpen,
   onOpenNewWindow,
   onTogglePin,
+  onPick,
   onDragStart,
   onDragEnd,
   onDrop,
@@ -1039,6 +1340,14 @@ function ModuleCard({
                 label="Edit"
                 onClick={() => {
                   onEdit(importedMod);
+                  setDropdownOpen(false);
+                }}
+              />
+              <DropdownItem
+                icon="pin"
+                label="Pick"
+                onClick={() => {
+                  onPick();
                   setDropdownOpen(false);
                 }}
               />
