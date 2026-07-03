@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getAuth } from 'firebase/auth';
 import Icon from '@/components/Icon';
 import { app } from '@/firebase/config';
+import { registerImportedModule } from '@/modules/registryRuntime';
+import { useModuleStore } from '@/state/moduleStore';
+import type { ImportedModule } from '@/state/moduleStore';
+import { useTabStore } from '@/state/tabStore';
 import { useFixedPopoverPosition } from './useFixedPopoverPosition';
 
 const GOOGLE_URL = 'https://www.google.com/';
@@ -9,6 +13,17 @@ const LUPANEL_URL = 'https://lupanel.vercel.app/';
 const USD_VND_RATE_URL = 'https://open.er-api.com/v6/latest/USD';
 const RATE_CACHE_KEY = 'ludashboard_usd_vnd_rate';
 const RATE_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
+const LUPANEL_MODULE: ImportedModule = {
+  id: 'lupanel',
+  title: 'LuPanel',
+  icon: 'layout-panel-top',
+  version: '1.0.0',
+  category: 'panel',
+  description: 'LuPanel workspace',
+  offline: false,
+  url: LUPANEL_URL,
+  moduleType: 'panel',
+};
 
 type QuickTool = 'translator' | 'money' | 'calculator';
 type TranslatorProvider = 'google' | 'groq';
@@ -21,6 +36,9 @@ interface RateCache {
 }
 
 export default function QuickTools() {
+  const importedModules = useModuleStore((s) => s.importedModules);
+  const importModule = useModuleStore((s) => s.importModule);
+  const openTab = useTabStore((s) => s.openTab);
   const [openTool, setOpenTool] = useState<QuickTool | null>(null);
   const [usdAmount, setUsdAmount] = useState('2');
   const [rateCache, setRateCache] = useState<RateCache | null>(() => loadStoredRate());
@@ -251,6 +269,18 @@ export default function QuickTools() {
   const setTranslatorOpen = () => setOpenTool((tool) => (tool === 'translator' ? null : 'translator'));
   const setMoneyOpen = () => setOpenTool((tool) => (tool === 'money' ? null : 'money'));
   const setCalculatorOpen = () => setOpenTool((tool) => (tool === 'calculator' ? null : 'calculator'));
+  const openLuPanel = () => {
+    const luPanelModule = importedModules.find((mod) => mod.id === LUPANEL_MODULE.id) ?? LUPANEL_MODULE;
+    if (!importedModules.some((mod) => mod.id === luPanelModule.id)) {
+      importModule(luPanelModule);
+    }
+    registerImportedModule(luPanelModule);
+    openTab({
+      moduleId: luPanelModule.id,
+      title: luPanelModule.title,
+      icon: luPanelModule.icon,
+    });
+  };
 
   return (
     <div className="relative flex flex-shrink-0 items-end pb-1" ref={containerRef}>
@@ -267,7 +297,7 @@ export default function QuickTools() {
         active={false}
         icon="layout-panel-top"
         label="Open LuPanel"
-        onClick={() => window.open(LUPANEL_URL, '_blank', 'noopener,noreferrer')}
+        onClick={openLuPanel}
       />
 
       {openTool === 'translator' && (
@@ -444,7 +474,12 @@ export default function QuickTools() {
               if (event.key === 'Escape') setOpenTool(null);
             }}
             className="h-11 w-full rounded-lg border border-black/35 bg-[var(--color-surface-subtle)] px-3 text-right text-lg font-semibold outline-none transition-colors focus:border-black focus:bg-white"
-            inputMode="decimal"
+            type="text"
+            inputMode="text"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="done"
             placeholder="20*10"
           />
 
