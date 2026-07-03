@@ -5,6 +5,7 @@ import { app } from '@/firebase/config';
 import { useFixedPopoverPosition } from './useFixedPopoverPosition';
 
 const GOOGLE_URL = 'https://www.google.com/';
+const LUPANEL_URL = 'https://lupanel.vercel.app/';
 const USD_VND_RATE_URL = 'https://open.er-api.com/v6/latest/USD';
 const RATE_CACHE_KEY = 'ludashboard_usd_vnd_rate';
 const RATE_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
@@ -262,6 +263,12 @@ export default function QuickTools() {
       <QuickToolButton active={openTool === 'translator'} icon="languages" label="Translator" onClick={setTranslatorOpen} />
       <QuickToolButton active={openTool === 'money'} label="USD to VND" textIcon="$" onClick={setMoneyOpen} />
       <QuickToolButton active={openTool === 'calculator'} icon="calculator" label="Quick calculator" onClick={setCalculatorOpen} />
+      <QuickToolButton
+        active={false}
+        icon="layout-panel-top"
+        label="Open LuPanel"
+        onClick={() => window.open(LUPANEL_URL, '_blank', 'noopener,noreferrer')}
+      />
 
       {openTool === 'translator' && (
         <div
