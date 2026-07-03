@@ -2,7 +2,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, app } from './config';
 import { useUserStore } from '@/state/userStore';
-import { useSidebarStore } from '@/state/sidebarStore';
+import { getViewportSidebarCollapsed, useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
 import { useModuleStore } from '@/state/moduleStore';
 import { useRightSidebarStore } from '@/state/rightSidebarStore';
@@ -50,8 +50,9 @@ const mergeState = (remote: any) => {
     offlineStorage.setActiveTab(remote.activeTabId);
   }
   if (remote.sidebarCollapsed !== undefined) {
-    useSidebarStore.setState({ collapsed: remote.sidebarCollapsed });
-    offlineStorage.setSidebarCollapsed(remote.sidebarCollapsed);
+    const collapsed = getViewportSidebarCollapsed(remote.sidebarCollapsed);
+    useSidebarStore.setState({ collapsed });
+    offlineStorage.setSidebarCollapsed(collapsed);
   }
   if (remote.rightSidebar !== undefined) {
     useRightSidebarStore.getState().syncFromCloud(remote.rightSidebar);

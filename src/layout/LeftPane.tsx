@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent, KeyboardEvent, SyntheticEvent } from 'react';
+import type { DragEvent, KeyboardEvent, PointerEvent, SyntheticEvent, TouchEvent } from 'react';
 import Icon from '@/components/Icon';
 import ImportModuleModal from '@/components/ImportModuleModal';
 import type { EditableModule, ImportModulePreset } from '@/components/ImportModuleModal';
@@ -20,6 +20,8 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOu
 const HOME_URL = 'https://ludashboard.vercel.app/';
 const SIDEBAR_EXPANDED_WIDTH = 264;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
+const MOBILE_SIDEBAR_QUERY = '(max-width: 768px)';
+const SIDEBAR_SWIPE_MIN_DISTANCE = 64;
 const VIETNAMESE_DAYS = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
 type SidebarModule = RegisteredModule;
@@ -27,6 +29,7 @@ type SidebarModule = RegisteredModule;
 export default function LeftPane() {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
+  const setSidebarCollapsed = useSidebarStore((s) => s.setCollapsed);
   const pinnedModuleIds = useSidebarStore((s) => s.pinnedModuleIds);
   const pickedModuleId = useSidebarStore((s) => s.pickedModuleId);
   const moduleOrderIds = useSidebarStore((s) => s.moduleOrderIds);
@@ -52,6 +55,14 @@ export default function LeftPane() {
 
   const accountDropdownRef = useRef<HTMLDivElement>(null);
   const allFilterInputRef = useRef<HTMLInputElement>(null);
+  const sidebarSwipeRef = useRef<{
+    pointerId?: number;
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    swiping: boolean;
+  } | null>(null);
 
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
   const [allFilterQuery, setAllFilterQuery] = useState('');
@@ -281,6 +292,107 @@ export default function LeftPane() {
     window.setTimeout(() => allFilterInputRef.current?.focus(), 0);
   };
 
+  const startSidebarSwipe = (clientX: number, clientY: number, pointerId?: number) => {
+    sidebarSwipeRef.current = {
+      pointerId,
+      startX: clientX,
+      startY: clientY,
+      currentX: clientX,
+      currentY: clientY,
+      swiping: false,
+    };
+  };
+
+  const updateSidebarSwipe = (clientX: number, clientY: number) => {
+    const swipe = sidebarSwipeRef.current;
+    if (!swipe) return false;
+
+    swipe.currentX = clientX;
+    swipe.currentY = clientY;
+
+    const deltaX = swipe.currentX - swipe.startX;
+    const deltaY = swipe.currentY - swipe.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+
+    if (!swipe.swiping && absX < 10 && absY < 10) return false;
+    if (!swipe.swiping && (deltaX >= 0 || absY > absX)) {
+      sidebarSwipeRef.current = null;
+      return false;
+    }
+
+    swipe.swiping = true;
+    return true;
+  };
+
+  const closeSidebarAfterSwipe = () => {
+    const swipe = sidebarSwipeRef.current;
+    if (!swipe) return;
+
+    const deltaX = swipe.currentX - swipe.startX;
+    const deltaY = swipe.currentY - swipe.startY;
+    sidebarSwipeRef.current = null;
+
+    if (deltaX <= -SIDEBAR_SWIPE_MIN_DISTANCE && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+      setSidebarCollapsed(true);
+    }
+  };
+
+  const handleSidebarPointerDown = (event: PointerEvent<HTMLElement>) => {
+    if (collapsed || event.pointerType === 'mouse') return;
+    if (!window.matchMedia?.(MOBILE_SIDEBAR_QUERY).matches) return;
+
+    startSidebarSwipe(event.clientX, event.clientY, event.pointerId);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleSidebarPointerMove = (event: PointerEvent<HTMLElement>) => {
+    const swipe = sidebarSwipeRef.current;
+    if (!swipe || swipe.pointerId !== event.pointerId) return;
+
+    if (updateSidebarSwipe(event.clientX, event.clientY)) {
+      event.preventDefault();
+      return;
+    }
+
+    if (!sidebarSwipeRef.current && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const finishSidebarSwipe = (event: PointerEvent<HTMLElement>) => {
+    const swipe = sidebarSwipeRef.current;
+    if (!swipe || swipe.pointerId !== event.pointerId) return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    closeSidebarAfterSwipe();
+  };
+
+  const handleSidebarTouchStart = (event: TouchEvent<HTMLElement>) => {
+    if (collapsed || sidebarSwipeRef.current) return;
+    if (!window.matchMedia?.(MOBILE_SIDEBAR_QUERY).matches) return;
+    if (event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    startSidebarSwipe(touch.clientX, touch.clientY);
+  };
+
+  const handleSidebarTouchMove = (event: TouchEvent<HTMLElement>) => {
+    const swipe = sidebarSwipeRef.current;
+    if (!swipe || swipe.pointerId != null || event.touches.length !== 1) return;
+
+    const touch = event.touches[0];
+    if (updateSidebarSwipe(touch.clientX, touch.clientY)) event.preventDefault();
+  };
+
+  const finishSidebarTouchSwipe = () => {
+    const swipe = sidebarSwipeRef.current;
+    if (!swipe || swipe.pointerId != null) return;
+    closeSidebarAfterSwipe();
+  };
+
   return (
     <aside
       className={`
@@ -291,6 +403,14 @@ export default function LeftPane() {
         ${collapsed ? 'max-md:-translate-x-full max-md:pointer-events-none' : 'max-md:translate-x-0 max-md:shadow-2xl'}
       `}
       style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
+      onPointerCancel={finishSidebarSwipe}
+      onPointerDown={handleSidebarPointerDown}
+      onPointerMove={handleSidebarPointerMove}
+      onPointerUp={finishSidebarSwipe}
+      onTouchCancel={finishSidebarTouchSwipe}
+      onTouchEnd={finishSidebarTouchSwipe}
+      onTouchMove={handleSidebarTouchMove}
+      onTouchStart={handleSidebarTouchStart}
     >
       <div className={`flex items-center h-14 px-3 gap-2.5 flex-shrink-0 ${collapsed ? 'justify-center' : ''}`}>
         {!collapsed ? (

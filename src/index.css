@@ -95,6 +95,10 @@ body {
     padding-top: 0.25rem;
   }
 
+  .sidebar-transition {
+    touch-action: pan-y;
+  }
+
   .top-right-toolbar .quick-actions-scroll {
     flex: 1 1 100%;
     max-width: 100%;

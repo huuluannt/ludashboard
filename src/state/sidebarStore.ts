@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { offlineStorage } from '@/storage/offlineStorage';
 
+const MOBILE_SIDEBAR_QUERY = '(max-width: 768px)';
+
 interface SidebarStore {
   collapsed: boolean;
   searchQuery: string;
@@ -21,6 +23,11 @@ interface SidebarStore {
   isPinned: (moduleId: string) => boolean;
 }
 
+export function getViewportSidebarCollapsed(collapsed: boolean) {
+  if (typeof window === 'undefined' || !window.matchMedia) return collapsed;
+  return window.matchMedia(MOBILE_SIDEBAR_QUERY).matches ? true : collapsed;
+}
+
 export const useSidebarStore = create<SidebarStore>((set, get) => ({
   collapsed: false,
   searchQuery: '',
@@ -30,7 +37,7 @@ export const useSidebarStore = create<SidebarStore>((set, get) => ({
   _hydrated: false,
 
   async hydrate() {
-    const collapsed = await offlineStorage.getSidebarCollapsed();
+    const collapsed = getViewportSidebarCollapsed(await offlineStorage.getSidebarCollapsed());
     const pinnedModuleIds = await offlineStorage.getPinned();
     const pickedModuleId = await offlineStorage.getPickedModule();
     const moduleOrderIds = await offlineStorage.getModuleOrder();
