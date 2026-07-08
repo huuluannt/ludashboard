@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   USER: 'lu:user',
   IMPORTED_MODULES: 'lu:importedModules',
   MODULE_OVERRIDES: 'lu:moduleOverrides',
+  THEME_MODE: 'lu:themeMode',
 } as const;
 
 /**
@@ -93,5 +94,13 @@ export const offlineStorage = {
   },
   async setModuleOverrides(overrides: any[]) {
     await set(STORAGE_KEYS.MODULE_OVERRIDES, overrides);
+  },
+
+  async getThemeMode(): Promise<'light' | 'dark'> {
+    const themeMode = await get(STORAGE_KEYS.THEME_MODE);
+    return themeMode === 'dark' ? 'dark' : 'light';
+  },
+  async setThemeMode(themeMode: 'light' | 'dark') {
+    await set(STORAGE_KEYS.THEME_MODE, themeMode);
   },
 };

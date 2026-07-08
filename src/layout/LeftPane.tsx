@@ -14,6 +14,7 @@ import { useModuleStore } from '@/state/moduleStore';
 import type { ImportedModule } from '@/state/moduleStore';
 import { useSidebarStore } from '@/state/sidebarStore';
 import { useTabStore } from '@/state/tabStore';
+import { useThemeStore } from '@/state/themeStore';
 import { useUserStore } from '@/state/userStore';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 
@@ -52,6 +53,8 @@ export default function LeftPane() {
   const user = useUserStore((s) => s.user);
   const setUser = useUserStore((s) => s.setUser);
   const signOut = useUserStore((s) => s.signOut);
+  const themeMode = useThemeStore((s) => s.mode);
+  const toggleThemeMode = useThemeStore((s) => s.toggleMode);
 
   const accountDropdownRef = useRef<HTMLDivElement>(null);
   const allFilterInputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +78,8 @@ export default function LeftPane() {
   const [showAllModules, setShowAllModules] = useState(false);
   const [dateStamp, setDateStamp] = useState('');
   const [timeDetail, setTimeDetail] = useState('');
+  const [sidebarSwipeActive, setSidebarSwipeActive] = useState(false);
+  const [sidebarSwipeOffset, setSidebarSwipeOffset] = useState(0);
 
   useEffect(() => {
     const updateTime = () => {
@@ -318,10 +323,14 @@ export default function LeftPane() {
     if (!swipe.swiping && absX < 10 && absY < 10) return false;
     if (!swipe.swiping && (deltaX >= 0 || absY > absX)) {
       sidebarSwipeRef.current = null;
+      setSidebarSwipeActive(false);
+      setSidebarSwipeOffset(0);
       return false;
     }
 
     swipe.swiping = true;
+    setSidebarSwipeActive(true);
+    setSidebarSwipeOffset(Math.max(deltaX, -SIDEBAR_EXPANDED_WIDTH));
     return true;
   };
 
@@ -332,9 +341,15 @@ export default function LeftPane() {
     const deltaX = swipe.currentX - swipe.startX;
     const deltaY = swipe.currentY - swipe.startY;
     sidebarSwipeRef.current = null;
+    const shouldClose = deltaX <= -SIDEBAR_SWIPE_MIN_DISTANCE && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
 
-    if (deltaX <= -SIDEBAR_SWIPE_MIN_DISTANCE && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+    setSidebarSwipeActive(false);
+    if (shouldClose) {
+      setSidebarSwipeOffset(-SIDEBAR_EXPANDED_WIDTH);
       setSidebarCollapsed(true);
+      window.setTimeout(() => setSidebarSwipeOffset(0), 250);
+    } else {
+      setSidebarSwipeOffset(0);
     }
   };
 
@@ -399,18 +414,22 @@ export default function LeftPane() {
         sidebar-transition flex flex-col h-full
         bg-[var(--color-surface-subtle)] border-r border-[var(--color-border-subtle)]
         select-none flex-shrink-0 max-md:fixed max-md:left-0 max-md:top-0 max-md:bottom-0 max-md:z-50 max-md:transition-transform max-md:duration-200
+        ${sidebarSwipeActive ? 'max-md:transition-none' : ''}
         ${collapsed ? 'overflow-visible' : 'overflow-hidden'}
         ${collapsed ? 'max-md:-translate-x-full max-md:pointer-events-none' : 'max-md:translate-x-0 max-md:shadow-2xl'}
       `}
-      style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
-      onPointerCancel={finishSidebarSwipe}
-      onPointerDown={handleSidebarPointerDown}
-      onPointerMove={handleSidebarPointerMove}
-      onPointerUp={finishSidebarSwipe}
-      onTouchCancel={finishSidebarTouchSwipe}
-      onTouchEnd={finishSidebarTouchSwipe}
-      onTouchMove={handleSidebarTouchMove}
-      onTouchStart={handleSidebarTouchStart}
+      style={{
+        width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
+        transform: sidebarSwipeOffset ? `translateX(${sidebarSwipeOffset}px)` : undefined,
+      }}
+      onPointerCancelCapture={finishSidebarSwipe}
+      onPointerDownCapture={handleSidebarPointerDown}
+      onPointerMoveCapture={handleSidebarPointerMove}
+      onPointerUpCapture={finishSidebarSwipe}
+      onTouchCancelCapture={finishSidebarTouchSwipe}
+      onTouchEndCapture={finishSidebarTouchSwipe}
+      onTouchMoveCapture={handleSidebarTouchMove}
+      onTouchStartCapture={handleSidebarTouchStart}
     >
       <div className={`flex items-center h-14 px-3 gap-2.5 flex-shrink-0 ${collapsed ? 'justify-center' : ''}`}>
         {!collapsed ? (
@@ -691,7 +710,14 @@ export default function LeftPane() {
         {accountDropdownOpen && !collapsed && (
           <div className="dropdown-up-enter absolute bottom-full left-2 right-2 mb-1 bg-white rounded-xl border border-[var(--color-border)] shadow-lg z-50 py-1">
             <DropdownItem icon="settings" label="Settings" onClick={() => setAccountDropdownOpen(false)} />
-            <DropdownItem icon="palette" label="Theme" onClick={() => setAccountDropdownOpen(false)} />
+            <DropdownItem
+              icon={themeMode === 'dark' ? 'sun' : 'moon'}
+              label={themeMode === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              onClick={() => {
+                toggleThemeMode();
+                setAccountDropdownOpen(false);
+              }}
+            />
             <DropdownItem icon="keyboard" label="Keyboard Shortcuts" onClick={() => setAccountDropdownOpen(false)} />
             <div className="mx-2 my-1 border-b border-[var(--color-border-subtle)]" />
             <DropdownItem

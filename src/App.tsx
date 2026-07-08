@@ -6,6 +6,7 @@ import { useUserStore } from '@/state/userStore';
 import { useModuleStore } from '@/state/moduleStore';
 import { useRightCornerSidebarStore } from '@/state/rightCornerSidebarStore';
 import { useRightSidebarStore } from '@/state/rightSidebarStore';
+import { useThemeStore } from '@/state/themeStore';
 import { initSyncManager } from '@/firebase/syncManager';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import { createTabFromModule } from '@/modules/openModule';
@@ -42,6 +43,7 @@ export default function App() {
       useModuleStore.getState().hydrate(),
       useRightSidebarStore.getState().hydrate(),
       useRightCornerSidebarStore.getState().hydrate(),
+      useThemeStore.getState().hydrate(),
     ]).then(() => {
       const moduleState = useModuleStore.getState();
       syncRegistryWithModuleStore(moduleState.importedModules, moduleState.moduleOverrides);

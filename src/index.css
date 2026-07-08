@@ -22,6 +22,60 @@
   --color-tab-height: 40px;
 }
 
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --color-surface: #0f1218;
+  --color-surface-subtle: #151a23;
+  --color-surface-muted: #202735;
+  --color-border: #313848;
+  --color-border-subtle: #262d3a;
+  --color-text-primary: #f3f6fb;
+  --color-text-secondary: #b9c2d0;
+  --color-text-tertiary: #7d8898;
+  --color-accent: #8da2ff;
+  --color-accent-hover: #a7b6ff;
+  --color-accent-subtle: #1d2747;
+  --color-danger: #ff6b7a;
+  --color-success: #4fd1a1;
+  --color-warning: #f6b869;
+}
+
+html[data-theme='dark'] .bg-white {
+  background-color: var(--color-surface);
+}
+
+html[data-theme='dark'] .bg-white\/60 {
+  background-color: color-mix(in srgb, var(--color-surface) 60%, transparent);
+}
+
+html[data-theme='dark'] .bg-white\/70 {
+  background-color: color-mix(in srgb, var(--color-surface) 70%, transparent);
+}
+
+html[data-theme='dark'] .bg-white\/80 {
+  background-color: color-mix(in srgb, var(--color-surface) 80%, transparent);
+}
+
+html[data-theme='dark'] .bg-white\/90 {
+  background-color: color-mix(in srgb, var(--color-surface) 90%, transparent);
+}
+
+html[data-theme='dark'] .hover\:bg-white:hover,
+html[data-theme='dark'] .hover\:bg-white\/80:hover {
+  background-color: var(--color-surface-muted);
+}
+
+html[data-theme='dark'] .focus\:bg-white:focus {
+  background-color: var(--color-surface);
+}
+
+html[data-theme='dark'] .bg-\[var\(--color-text-primary\)\],
+html[data-theme='dark'] .bg-black,
+html[data-theme='dark'] .hover\:bg-black:hover {
+  background-color: #f3f6fb;
+  color: #111827;
+}
+
 /* ===== Base ===== */
 *,
 *::before,
@@ -40,6 +94,7 @@ body {
   font-family: var(--font-sans);
   color: var(--color-text-primary);
   background: var(--color-surface);
+  transition: background-color 160ms ease, color 160ms ease;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -165,6 +220,16 @@ body {
   color: #9a6a00;
 }
 
+html[data-theme='dark'] .module-icon-native {
+  background: #2d2617;
+  border-color: #5c4821;
+  color: #f7c85f;
+}
+
+html[data-theme='dark'] .module-icon-native svg {
+  color: #f7c85f;
+}
+
 .module-icon-panel {
   background: #eff6ff;
   border-color: #bfdbfe;
@@ -173,6 +238,16 @@ body {
 
 .module-icon-panel svg {
   color: #2563eb;
+}
+
+html[data-theme='dark'] .module-icon-panel {
+  background: #182744;
+  border-color: #2f548d;
+  color: #8db7ff;
+}
+
+html[data-theme='dark'] .module-icon-panel svg {
+  color: #8db7ff;
 }
 
 /* ===== Upward dropdown animation ===== */

@@ -7,6 +7,7 @@ import { useTabStore } from '@/state/tabStore';
 import { useModuleStore } from '@/state/moduleStore';
 import { useRightSidebarStore } from '@/state/rightSidebarStore';
 import { useRightCornerSidebarStore } from '@/state/rightCornerSidebarStore';
+import { isThemeMode, useThemeStore } from '@/state/themeStore';
 import { useSyncStore } from '@/state/syncStore';
 import { offlineStorage } from '@/storage/offlineStorage';
 import { syncRegistryWithModuleStore } from '@/modules/registryRuntime';
@@ -60,6 +61,9 @@ const mergeState = (remote: any) => {
   if (remote.rightCornerSidebar !== undefined) {
     useRightCornerSidebarStore.getState().syncFromCloud(remote.rightCornerSidebar);
   }
+  if (remote.themeMode !== undefined && isThemeMode(remote.themeMode)) {
+    useThemeStore.getState().setMode(remote.themeMode);
+  }
 };
 
 const getLocalState = () => {
@@ -81,6 +85,7 @@ const getLocalState = () => {
       visible: useRightCornerSidebarStore.getState().visible,
       moduleId: useRightCornerSidebarStore.getState().moduleId,
     },
+    themeMode: useThemeStore.getState().mode,
     updatedAt: serverTimestamp(),
   };
 };
@@ -138,9 +143,10 @@ export const initSyncManager = () => {
     const m = useModuleStore.getState()._hydrated;
     const r = useRightSidebarStore.getState()._hydrated;
     const rc = useRightCornerSidebarStore.getState()._hydrated;
+    const theme = useThemeStore.getState()._hydrated;
     
     // We must wait for ALL local stores to hydrate AND Firebase Auth to resolve
-    if (u && s && t && m && r && rc && authReady && !hydrated) {
+    if (u && s && t && m && r && rc && theme && authReady && !hydrated) {
       hydrated = true;
       if (useUserStore.getState().user) {
         fetchCloudConfig().then(() => {
@@ -180,4 +186,5 @@ export const initSyncManager = () => {
   useModuleStore.subscribe(() => { checkHydrated(); queueSync(); });
   useRightSidebarStore.subscribe(() => { checkHydrated(); queueSync(); });
   useRightCornerSidebarStore.subscribe(() => { checkHydrated(); queueSync(); });
+  useThemeStore.subscribe(() => { checkHydrated(); queueSync(); });
 };
