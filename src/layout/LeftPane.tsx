@@ -23,6 +23,7 @@ const SIDEBAR_EXPANDED_WIDTH = 264;
 const SIDEBAR_COLLAPSED_WIDTH = 56;
 const MOBILE_SIDEBAR_QUERY = '(max-width: 768px)';
 const SIDEBAR_SWIPE_MIN_DISTANCE = 64;
+const isMobileSidebarViewport = () => window.matchMedia?.(MOBILE_SIDEBAR_QUERY).matches ?? false;
 const VIETNAMESE_DAYS = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
 type SidebarModule = RegisteredModule;
@@ -354,8 +355,8 @@ export default function LeftPane() {
   };
 
   const handleSidebarPointerDown = (event: PointerEvent<HTMLElement>) => {
-    if (collapsed || event.pointerType === 'mouse') return;
-    if (!window.matchMedia?.(MOBILE_SIDEBAR_QUERY).matches) return;
+    if (collapsed || sidebarSwipeRef.current || event.pointerType === 'mouse') return;
+    if (!isMobileSidebarViewport()) return;
 
     startSidebarSwipe(event.clientX, event.clientY, event.pointerId);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -387,7 +388,7 @@ export default function LeftPane() {
 
   const handleSidebarTouchStart = (event: TouchEvent<HTMLElement>) => {
     if (collapsed || sidebarSwipeRef.current) return;
-    if (!window.matchMedia?.(MOBILE_SIDEBAR_QUERY).matches) return;
+    if (!isMobileSidebarViewport()) return;
     if (event.touches.length !== 1) return;
 
     const touch = event.touches[0];
@@ -609,7 +610,19 @@ export default function LeftPane() {
         </div>
       )}
 
-      <div className={`flex-1 px-1.5 py-1 ${collapsed ? 'relative z-30 overflow-visible' : 'overflow-y-auto'}`}>
+      <div
+        className={`flex-1 px-1.5 py-1 ${
+          collapsed ? 'relative z-30 overflow-visible' : 'mobile-sidebar-swipe-zone overflow-y-auto'
+        }`}
+        onPointerCancelCapture={finishSidebarSwipe}
+        onPointerDownCapture={handleSidebarPointerDown}
+        onPointerMoveCapture={handleSidebarPointerMove}
+        onPointerUpCapture={finishSidebarSwipe}
+        onTouchCancelCapture={finishSidebarTouchSwipe}
+        onTouchEndCapture={finishSidebarTouchSwipe}
+        onTouchMoveCapture={handleSidebarTouchMove}
+        onTouchStartCapture={handleSidebarTouchStart}
+      >
         {collapsed ? (
           openTabItems.map(({ tab, mod, manifest, source, importedMod }) => (
             <OpenModuleCard
@@ -1048,7 +1061,7 @@ function OpenModuleCard({
   }, [dropdownOpen]);
 
   const handleDragStart = (event: DragEvent) => {
-    if (isCardAction(event.target)) {
+    if (isMobileSidebarViewport() || isCardAction(event.target)) {
       event.preventDefault();
       return;
     }
@@ -1349,7 +1362,7 @@ function ModuleCard({
   }, [dropdownOpen]);
 
   const handleDragStart = (event: DragEvent) => {
-    if (isCardAction(event.target)) {
+    if (isMobileSidebarViewport() || isCardAction(event.target)) {
       event.preventDefault();
       return;
     }

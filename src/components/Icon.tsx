@@ -188,6 +188,7 @@ import {
   Wrench,
   X,
   Zap,
+  icons as lucideIcons,
 } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import type { ComponentType } from 'react';
@@ -380,14 +381,21 @@ const lucideIconMap = {
 
 const toIconName = (value: string) => {
   return value
+    .trim()
+    .replace(/Icon$/i, '')
+    .replace(/[\s_]+/g, '-')
     .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
     .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
+    .replace(/[^a-zA-Z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
     .toLowerCase();
 };
 
-const iconMap = Object.fromEntries(
-  Object.entries(lucideIconMap).map(([name, component]) => [toIconName(name), component]),
-) as Record<string, ComponentType<LucideProps>>;
+const iconMap = Object.fromEntries([
+  ...Object.entries(lucideIcons).map(([name, component]) => [toIconName(name), component]),
+  ...Object.entries(lucideIconMap).map(([name, component]) => [toIconName(name), component]),
+]) as Record<string, ComponentType<LucideProps>>;
 
 Object.assign(iconMap, {
   edit: Edit2,
@@ -396,6 +404,11 @@ Object.assign(iconMap, {
   trash: Trash2,
   'volume-2': Volume2,
 });
+
+export const resolveLucideIconName = (value: string) => {
+  const normalizedName = toIconName(value);
+  return normalizedName && iconMap[normalizedName] ? normalizedName : null;
+};
 
 interface IconProps extends LucideProps {
   name: string;
@@ -416,7 +429,8 @@ export default function Icon({ name, ...props }: IconProps) {
     );
   }
 
-  const IconComponent = iconMap[name];
+  const resolvedName = resolveLucideIconName(name);
+  const IconComponent = resolvedName ? iconMap[resolvedName] : null;
   if (!IconComponent) {
     return <Package {...props} />;
   }

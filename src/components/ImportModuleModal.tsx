@@ -8,7 +8,7 @@ import { moduleRegistry } from '@/modules/moduleRegistry';
 import type { ModuleManifest } from '@/modules/moduleTypes';
 import { applyModuleOverride, registerImportedModule } from '@/modules/registryRuntime';
 import { getCustomIconLibrary } from '@/lib/customIconLibrary';
-import Icon, { availableIcons } from './Icon';
+import Icon, { availableIcons, resolveLucideIconName } from './Icon';
 
 const MAX_ICON_SIZE = 512 * 1024;
 const PANEL_MODULE_DEFAULTS = {
@@ -69,9 +69,13 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
 
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [iconUploadError, setIconUploadError] = useState('');
+  const [showLucideIconInput, setShowLucideIconInput] = useState(false);
+  const [lucideIconName, setLucideIconName] = useState('');
+  const [lucideIconError, setLucideIconError] = useState('');
   const [customIcons, setCustomIcons] = useState(() => getCustomIconLibrary());
   const iconPickerRef = useRef<HTMLDivElement>(null);
   const iconFileInputRef = useRef<HTMLInputElement>(null);
+  const lucideIconInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -118,6 +122,27 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
     };
     reader.onerror = () => setIconUploadError('Could not read that icon file.');
     reader.readAsDataURL(file);
+  };
+
+  const openLucideIconInput = () => {
+    setShowLucideIconInput(true);
+    setIconUploadError('');
+    setLucideIconError('');
+    window.setTimeout(() => lucideIconInputRef.current?.focus(), 0);
+  };
+
+  const handleLucideIconAdd = () => {
+    const nextIcon = resolveLucideIconName(lucideIconName);
+    if (!nextIcon) {
+      setLucideIconError('Lucide icon not found.');
+      return;
+    }
+
+    setIcon(nextIcon);
+    setLucideIconName(nextIcon);
+    setLucideIconError('');
+    setIconUploadError('');
+    setShowIconPicker(false);
   };
 
   const handleImport = (e: FormEvent) => {
@@ -187,6 +212,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
   };
 
   const iconLabel = icon.startsWith('data:image/') ? 'custom icon' : icon;
+  const lucideIconPreview = resolveLucideIconName(lucideIconName);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -244,14 +270,27 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
               {showIconPicker && (
                 <div className="absolute top-full left-0 mt-1 w-[340px] max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-lg border border-[var(--color-border)] p-2 z-10 grid grid-cols-8 gap-1 max-h-72 overflow-y-auto">
                   <div className="col-span-8 pb-1 mb-1 border-b border-[var(--color-border-subtle)]">
-                    <button
-                      type="button"
-                      onClick={() => iconFileInputRef.current?.click()}
-                      className="w-full h-9 rounded-lg flex items-center justify-center gap-2 text-[11px] font-semibold tracking-wide text-[var(--color-accent)] hover:bg-[var(--color-surface-subtle)] transition-colors cursor-pointer"
-                    >
-                      <Icon name="plus" size={14} />
-                      ADD ICON
-                    </button>
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLucideIconError('');
+                          iconFileInputRef.current?.click();
+                        }}
+                        className="h-9 min-w-0 rounded-lg flex items-center justify-center gap-1.5 px-2 text-[11px] font-semibold tracking-wide text-[var(--color-accent)] hover:bg-[var(--color-surface-subtle)] transition-colors cursor-pointer"
+                      >
+                        <Icon name="plus" size={14} />
+                        <span className="truncate">ADD ICON</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openLucideIconInput}
+                        className="h-9 min-w-0 rounded-lg flex items-center justify-center gap-1.5 px-2 text-[11px] font-semibold tracking-wide text-[var(--color-accent)] hover:bg-[var(--color-surface-subtle)] transition-colors cursor-pointer"
+                      >
+                        <Icon name="sparkles" size={14} />
+                        <span className="truncate">ADD ICON LUCIDE</span>
+                      </button>
+                    </div>
                     <input
                       ref={iconFileInputRef}
                       type="file"
@@ -259,6 +298,44 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
                       className="hidden"
                       onChange={handleIconUpload}
                     />
+                    {showLucideIconInput && (
+                      <div className="mt-2 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-subtle)] p-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-[var(--color-border-subtle)] bg-white text-[var(--color-text-secondary)]">
+                            <Icon name={lucideIconPreview ?? 'search'} size={16} />
+                          </div>
+                          <input
+                            ref={lucideIconInputRef}
+                            type="text"
+                            value={lucideIconName}
+                            onChange={(event) => {
+                              setLucideIconName(event.currentTarget.value);
+                              setLucideIconError('');
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                handleLucideIconAdd();
+                              }
+                            }}
+                            placeholder="layout-panel-top"
+                            className="h-8 min-w-0 flex-1 rounded-md border border-[var(--color-border-subtle)] bg-white px-2 font-mono text-xs text-[var(--color-text-primary)] outline-none transition-colors focus:border-[var(--color-accent)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleLucideIconAdd}
+                            className="h-8 flex-shrink-0 rounded-md bg-[var(--color-text-primary)] px-2.5 text-[11px] font-semibold text-white transition-colors hover:bg-black"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        {lucideIconError && (
+                          <p className="mt-1 text-[10px] text-[var(--color-danger)]">
+                            {lucideIconError}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {iconUploadError && (
                       <p className="mt-1 text-[10px] text-[var(--color-danger)] text-center">
                         {iconUploadError}

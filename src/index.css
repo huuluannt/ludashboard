@@ -154,6 +154,16 @@ body {
     touch-action: pan-y;
   }
 
+  .mobile-sidebar-swipe-zone {
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .mobile-sidebar-swipe-zone .module-card {
+    -webkit-user-drag: none;
+    touch-action: pan-y;
+  }
+
   .top-right-toolbar .quick-actions-scroll {
     flex: 1 1 100%;
     max-width: 100%;
