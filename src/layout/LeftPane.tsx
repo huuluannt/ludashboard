@@ -41,6 +41,7 @@ export default function LeftPane() {
   const removeModuleReferences = useSidebarStore((s) => s.removeModuleReferences);
 
   const activeTabId = useTabStore((s) => s.activeTabId);
+  const closeAllTabs = useTabStore((s) => s.closeAllTabs);
   const closeTab = useTabStore((s) => s.closeTab);
   const openTab = useTabStore((s) => s.openTab);
   const reorderTabs = useTabStore((s) => s.reorderTabs);
@@ -195,6 +196,13 @@ export default function LeftPane() {
   const handleOpenModuleInNewWindow = (mod: SidebarModule) => {
     const url = getExternalModuleUrl(mod, importedModules) ?? getDashboardModuleUrl(mod.manifest.id);
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleCopyModuleLink = (mod: SidebarModule) => {
+    const url = getExternalModuleUrl(mod, importedModules) ?? getDashboardModuleUrl(mod.manifest.id);
+    void copyTextToClipboard(url).catch((error) => {
+      console.error('Failed to copy module link', error);
+    });
   };
 
   const handleAllFilterKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -549,6 +557,17 @@ export default function LeftPane() {
             <span className="text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
               {showAllModules ? 'Modules' : 'Open'}
             </span>
+            {!showAllModules && openTabItems.length > 0 && (
+              <button
+                type="button"
+                onClick={() => closeAllTabs(pickedModuleId)}
+                className="ml-2 flex h-5 w-5 items-center justify-center rounded-md text-[var(--color-text-tertiary)] transition-colors hover:bg-white hover:text-[var(--color-text-primary)]"
+                title="Close all open modules"
+                aria-label="Close all open modules"
+              >
+                <Icon name="x" size={12} />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -638,6 +657,7 @@ export default function LeftPane() {
               isDragging={draggedTabId === tab.moduleId}
               onOpen={() => setActiveTab(tab.moduleId)}
               onOpenNewWindow={() => mod && handleOpenModuleInNewWindow(mod)}
+              onCopyLink={mod ? () => handleCopyModuleLink(mod) : undefined}
               onTogglePin={() => togglePin(tab.moduleId)}
               onPick={() => setPickedModule(tab.moduleId)}
               onEdit={() => mod && handleEditModule(mod, importedMod)}
@@ -669,6 +689,7 @@ export default function LeftPane() {
                 isDragging={draggedModuleId === mod.manifest.id}
                 onOpen={() => handleOpenModule(mod)}
                 onOpenNewWindow={() => handleOpenModuleInNewWindow(mod)}
+                onCopyLink={() => handleCopyModuleLink(mod)}
                 onTogglePin={() => togglePin(mod.manifest.id)}
                 onPick={() => setPickedModule(mod.manifest.id)}
                 onDragStart={() => setDraggedModuleId(mod.manifest.id)}
@@ -702,6 +723,7 @@ export default function LeftPane() {
                 isDragging={draggedTabId === tab.moduleId}
                 onOpen={() => setActiveTab(tab.moduleId)}
                 onOpenNewWindow={() => mod && handleOpenModuleInNewWindow(mod)}
+                onCopyLink={mod ? () => handleCopyModuleLink(mod) : undefined}
                 onTogglePin={() => togglePin(tab.moduleId)}
                 onPick={() => setPickedModule(tab.moduleId)}
                 onEdit={() => mod && handleEditModule(mod, importedMod)}
@@ -808,6 +830,7 @@ interface OpenModuleCardProps {
   isDragging: boolean;
   onOpen: () => void;
   onOpenNewWindow: () => void;
+  onCopyLink?: () => void;
   onTogglePin: () => void;
   onPick: () => void;
   onEdit: () => void;
@@ -1026,6 +1049,7 @@ function OpenModuleCard({
   isDragging,
   onOpen,
   onOpenNewWindow,
+  onCopyLink,
   onTogglePin,
   onPick,
   onEdit,
@@ -1246,6 +1270,16 @@ function OpenModuleCard({
                   onOpenNewWindow();
                 }}
               />
+              {onCopyLink && (
+                <DropdownItem
+                  icon="copy"
+                  label="Copy Link"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onCopyLink();
+                  }}
+                />
+              )}
               {mod && (
                 <DropdownItem
                   icon="edit"
@@ -1309,6 +1343,7 @@ interface ModuleCardProps {
   isDragging: boolean;
   onOpen: () => void;
   onOpenNewWindow: () => void;
+  onCopyLink: () => void;
   onTogglePin: () => void;
   onPick: () => void;
   onDragStart: () => void;
@@ -1327,6 +1362,7 @@ function ModuleCard({
   isDragging,
   onOpen,
   onOpenNewWindow,
+  onCopyLink,
   onTogglePin,
   onPick,
   onDragStart,
@@ -1496,6 +1532,14 @@ function ModuleCard({
                 }}
               />
               <DropdownItem
+                icon="copy"
+                label="Copy Link"
+                onClick={() => {
+                  setDropdownOpen(false);
+                  onCopyLink();
+                }}
+              />
+              <DropdownItem
                 icon="edit"
                 label="Edit"
                 onClick={() => {
@@ -1579,4 +1623,22 @@ function DropdownItem({
       {label}
     </button>
   );
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  textarea.remove();
 }

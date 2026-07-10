@@ -10,6 +10,7 @@ interface TabStore {
   hydrate: () => Promise<void>;
   openTab: (tab: TabItem) => void;
   closeTab: (moduleId: string) => void;
+  closeAllTabs: (keepModuleId?: string | null) => void;
   setActiveTab: (moduleId: string) => void;
   reorderTabs: (from: number, to: number) => void;
   updateTab: (moduleId: string, patch: Partial<Omit<TabItem, 'moduleId'>>) => void;
@@ -58,6 +59,16 @@ export const useTabStore = create<TabStore>((set, get) => ({
         nextActive = next[idx].moduleId;
       }
     }
+    set({ tabs: next, activeTabId: nextActive });
+    offlineStorage.setTabs(next);
+    offlineStorage.setActiveTab(nextActive);
+  },
+
+  closeAllTabs(keepModuleId?: string | null) {
+    const { tabs, activeTabId } = get();
+    const next = keepModuleId ? tabs.filter((tab) => tab.moduleId === keepModuleId) : [];
+    const nextActive = next.length === 0 ? null : activeTabId === keepModuleId ? keepModuleId : next[0].moduleId;
+
     set({ tabs: next, activeTabId: nextActive });
     offlineStorage.setTabs(next);
     offlineStorage.setActiveTab(nextActive);
