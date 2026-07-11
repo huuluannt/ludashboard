@@ -8,9 +8,11 @@ import {
   NotesCloudValue,
   saveNotesSnapshot,
 } from '@/modules/notes/noteStorage';
+import { useTabStore } from '@/state/tabStore';
 import { useFixedPopoverPosition } from './useFixedPopoverPosition';
 
 export default function QuickNoteButton() {
+  const openTab = useTabStore((s) => s.openTab);
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -68,6 +70,11 @@ export default function QuickNoteButton() {
     }
   };
 
+  const openNotesModule = () => {
+    openTab({ moduleId: 'notes', title: 'Notes', icon: 'sticky-note' });
+    setOpen(false);
+  };
+
   return (
     <div className="relative flex-shrink-0 px-0.5 pb-1" ref={containerRef}>
       <button
@@ -96,6 +103,15 @@ export default function QuickNoteButton() {
               <Icon name="sticky-note" size={13} className="text-[var(--color-accent)]" />
               <p className="truncate text-xs font-semibold text-[var(--color-text-primary)]">Quick note</p>
             </div>
+            <button
+              type="button"
+              onClick={openNotesModule}
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+              title="Open Notes module"
+              aria-label="Open Notes module"
+            >
+              <Icon name="panel-right-open" size={13} />
+            </button>
             <button
               type="button"
               onClick={saveQuickNote}

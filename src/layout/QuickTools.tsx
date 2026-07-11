@@ -11,9 +11,19 @@ import { useFixedPopoverPosition } from './useFixedPopoverPosition';
 const GOOGLE_URL = 'https://www.google.com/';
 const GOOGLE_TRANSLATE_URL = 'https://translate.google.com.vn/';
 const LUPANEL_URL = 'https://lupanel.vercel.app/';
-const USD_VND_RATE_URL = 'https://open.er-api.com/v6/latest/USD';
-const RATE_CACHE_KEY = 'ludashboard_usd_vnd_rate';
+const EXCHANGE_RATE_API_URL = 'https://open.er-api.com/v6/latest';
+const RATE_CACHE_KEY_PREFIX = 'ludashboard_currency_rate_';
 const RATE_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
+const WISE_CONVERTER_URL = 'https://wise.com/vn/currency-converter';
+const MONEY_CURRENCIES = [
+  { code: 'USD', label: 'USD Mỹ', symbol: '$', fractionDigits: 2 },
+  { code: 'AUD', label: 'USD Úc', symbol: 'A$', fractionDigits: 2 },
+  { code: 'JPY', label: 'Yên Nhật', symbol: '¥', fractionDigits: 0 },
+  { code: 'THB', label: 'Thái', symbol: '฿', fractionDigits: 2 },
+  { code: 'CNY', label: 'Nhân dân tệ', symbol: '¥', fractionDigits: 2 },
+  { code: 'KRW', label: 'Hàn', symbol: '₩', fractionDigits: 0 },
+] as const;
+const VND_CURRENCY = { code: 'VND', label: 'VND', symbol: 'VND', fractionDigits: 0 } as const;
 const LUPANEL_MODULE: ImportedModule = {
   id: 'lupanel',
   title: 'LuPanel',
@@ -28,8 +38,13 @@ const LUPANEL_MODULE: ImportedModule = {
 
 type QuickTool = 'translator' | 'money' | 'calculator';
 type TranslatorProvider = 'google' | 'groq';
+type MoneyCurrency = (typeof MONEY_CURRENCIES)[number];
+type MoneyCurrencyCode = MoneyCurrency['code'];
+type MoneyDirection = 'to-vnd' | 'from-vnd';
+type DisplayCurrency = MoneyCurrency | typeof VND_CURRENCY;
 
 interface RateCache {
+  baseCode: MoneyCurrencyCode;
   rate: number;
   fetchedAt: number;
   nextUpdateAt?: number;
@@ -41,8 +56,10 @@ export default function QuickTools() {
   const importModule = useModuleStore((s) => s.importModule);
   const openTab = useTabStore((s) => s.openTab);
   const [openTool, setOpenTool] = useState<QuickTool | null>(null);
-  const [usdAmount, setUsdAmount] = useState('2');
-  const [rateCache, setRateCache] = useState<RateCache | null>(() => loadStoredRate());
+  const [moneyAmount, setMoneyAmount] = useState('2');
+  const [moneyCurrencyCode, setMoneyCurrencyCode] = useState<MoneyCurrencyCode>('USD');
+  const [moneyDirection, setMoneyDirection] = useState<MoneyDirection>('to-vnd');
+  const [rateCache, setRateCache] = useState<RateCache | null>(() => loadStoredRate('USD'));
   const [rateStatus, setRateStatus] = useState('');
   const [formula, setFormula] = useState('20*10');
   const [translatorText, setTranslatorText] = useState('');
@@ -109,14 +126,14 @@ export default function QuickTools() {
   useEffect(() => {
     if (openTool !== 'money') return;
 
-    const cached = loadStoredRate();
-    if (cached) setRateCache(cached);
+    const cached = loadStoredRate(moneyCurrencyCode);
+    setRateCache(cached);
     if (cached && Date.now() - cached.fetchedAt < RATE_CACHE_MAX_AGE_MS) return;
 
     let cancelled = false;
     setRateStatus('Updating rate...');
 
-    fetch(USD_VND_RATE_URL)
+    fetch(`${EXCHANGE_RATE_API_URL}/${moneyCurrencyCode}`)
       .then((response) => {
         if (!response.ok) throw new Error(`Rate request failed: ${response.status}`);
         return response.json();
@@ -124,17 +141,18 @@ export default function QuickTools() {
       .then((data) => {
         const rate = Number(data?.rates?.VND);
         if (!Number.isFinite(rate) || rate <= 0 || data?.result === 'error') {
-          throw new Error('USD to VND rate unavailable.');
+          throw new Error(`${moneyCurrencyCode} to VND rate unavailable.`);
         }
 
         const nextCache: RateCache = {
+          baseCode: moneyCurrencyCode,
           rate,
           fetchedAt: Date.now(),
           nextUpdateAt: Number(data?.time_next_update_unix || 0) * 1000 || undefined,
           updatedAtText: typeof data?.time_last_update_utc === 'string' ? data.time_last_update_utc : undefined,
         };
 
-        localStorage.setItem(RATE_CACHE_KEY, JSON.stringify(nextCache));
+        localStorage.setItem(getRateCacheKey(moneyCurrencyCode), JSON.stringify(nextCache));
         if (!cancelled) {
           setRateCache(nextCache);
           setRateStatus('');
@@ -147,13 +165,21 @@ export default function QuickTools() {
     return () => {
       cancelled = true;
     };
-  }, [openTool]);
+  }, [moneyCurrencyCode, openTool]);
 
+  const selectedMoneyCurrency = useMemo(
+    () => MONEY_CURRENCIES.find((currency) => currency.code === moneyCurrencyCode) ?? MONEY_CURRENCIES[0],
+    [moneyCurrencyCode],
+  );
+  const moneySourceCurrency = moneyDirection === 'to-vnd' ? selectedMoneyCurrency : VND_CURRENCY;
+  const moneyTargetCurrency = moneyDirection === 'to-vnd' ? VND_CURRENCY : selectedMoneyCurrency;
+  const moneyPairLabel = `${moneySourceCurrency.label} to ${moneyTargetCurrency.label}`;
+  const wiseConverterUrl = `${WISE_CONVERTER_URL}/${selectedMoneyCurrency.code.toLowerCase()}-to-vnd-rate`;
   const convertedAmount = useMemo(() => {
-    const amount = Number(usdAmount);
+    const amount = Number(moneyAmount);
     if (!rateCache || !Number.isFinite(amount)) return null;
-    return amount * rateCache.rate;
-  }, [rateCache, usdAmount]);
+    return moneyDirection === 'to-vnd' ? amount * rateCache.rate : amount / rateCache.rate;
+  }, [moneyAmount, moneyDirection, rateCache]);
 
   const calculatorResult = useMemo(() => evaluateExpression(formula), [formula]);
 
@@ -270,6 +296,10 @@ export default function QuickTools() {
   const setTranslatorOpen = () => setOpenTool((tool) => (tool === 'translator' ? null : 'translator'));
   const setMoneyOpen = () => setOpenTool((tool) => (tool === 'money' ? null : 'money'));
   const setCalculatorOpen = () => setOpenTool((tool) => (tool === 'calculator' ? null : 'calculator'));
+  const openNativeModule = (moduleId: string, title: string, icon: string) => {
+    openTab({ moduleId, title, icon });
+    setOpenTool(null);
+  };
   const openLuPanel = () => {
     const luPanelModule = importedModules.find((mod) => mod.id === LUPANEL_MODULE.id) ?? LUPANEL_MODULE;
     if (!importedModules.some((mod) => mod.id === luPanelModule.id)) {
@@ -292,7 +322,7 @@ export default function QuickTools() {
         onClick={() => window.open(GOOGLE_URL, '_blank', 'noopener,noreferrer')}
       />
       <QuickToolButton active={openTool === 'translator'} icon="languages" label="Translator" onClick={setTranslatorOpen} />
-      <QuickToolButton active={openTool === 'money'} label="USD to VND" textIcon="$" onClick={setMoneyOpen} />
+      <QuickToolButton active={openTool === 'money'} label="Currency converter" textIcon="$" onClick={setMoneyOpen} />
       <QuickToolButton active={openTool === 'calculator'} icon="calculator" label="Quick calculator" onClick={setCalculatorOpen} />
       <QuickToolButton
         active={false}
@@ -412,34 +442,65 @@ export default function QuickTools() {
         >
           <div className="mb-2 flex items-center gap-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--color-surface-subtle)] text-[var(--color-accent)]">
-              $
+              {selectedMoneyCurrency.symbol}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-[var(--color-text-primary)]">Money: USD to VND</p>
+              <select
+                value={moneyCurrencyCode}
+                onChange={(event) => setMoneyCurrencyCode(event.currentTarget.value as MoneyCurrencyCode)}
+                className="h-6 max-w-full rounded-md border border-transparent bg-transparent px-0 text-xs font-semibold text-[var(--color-text-primary)] outline-none transition-colors hover:border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-subtle)] focus:border-[var(--color-accent)] focus:bg-white"
+                aria-label="Currency pair"
+              >
+                {MONEY_CURRENCIES.map((currency) => (
+                  <option key={currency.code} value={currency.code}>
+                    {moneyDirection === 'to-vnd' ? `${currency.label} to VND` : `VND to ${currency.label}`}
+                  </option>
+                ))}
+              </select>
               <p className="truncate text-[10px] text-[var(--color-text-tertiary)]">
-                {rateCache ? `1 USD = ${formatVnd(rateCache.rate)} VND` : 'Fetching live rate...'}
+                {rateCache ? `1 ${selectedMoneyCurrency.code} = ${formatCurrencyAmount(rateCache.rate, VND_CURRENCY)} VND` : 'Fetching live rate...'}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setMoneyDirection((direction) => (direction === 'to-vnd' ? 'from-vnd' : 'to-vnd'))}
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+              title={`Switch to ${moneyDirection === 'to-vnd' ? `VND to ${selectedMoneyCurrency.label}` : `${selectedMoneyCurrency.label} to VND`}`}
+              aria-label="Switch currency direction"
+            >
+              <Icon name="arrow-left-right" size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open(wiseConverterUrl, '_blank', 'noopener,noreferrer')}
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+              title="Open Wise currency converter"
+              aria-label="Open Wise currency converter"
+            >
+              <Icon name="external-link" size={13} />
+            </button>
           </div>
 
           <label className="relative block">
             <input
               ref={moneyInputRef}
-              value={usdAmount}
-              aria-label="USD amount"
-              onChange={(event) => setUsdAmount(sanitizeMoney(event.currentTarget.value))}
+              value={moneyAmount}
+              aria-label={`${moneyPairLabel} amount`}
+              onChange={(event) => setMoneyAmount(sanitizeMoney(event.currentTarget.value))}
               onFocus={(event) => event.currentTarget.select()}
               onClick={(event) => event.currentTarget.select()}
-              className="h-11 w-full rounded-lg border border-black/35 bg-[var(--color-surface-subtle)] px-3 pr-9 text-right text-lg font-semibold outline-none transition-colors focus:border-black focus:bg-white"
+              className="h-11 w-full rounded-lg border border-black/35 bg-[var(--color-surface-subtle)] px-3 pr-16 text-right text-lg font-semibold outline-none transition-colors focus:border-black focus:bg-white"
               inputMode="decimal"
               placeholder="0"
             />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-lg font-semibold text-[var(--color-text-primary)]">$</span>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-lg font-semibold text-[var(--color-text-primary)]">
+              {moneySourceCurrency.symbol}
+            </span>
           </label>
 
           <div className="mt-3 rounded-xl bg-[var(--color-surface-subtle)] px-3 py-3 text-right">
             <p className="text-2xl font-semibold tracking-tight text-[var(--color-text-primary)]">
-              {convertedAmount == null ? '--' : formatVnd(convertedAmount)} VND
+              {convertedAmount == null ? '--' : `${formatCurrencyAmount(convertedAmount, moneyTargetCurrency)} ${moneyTargetCurrency.code}`}
             </p>
             <div className="mt-1 flex items-center justify-between gap-2 text-[9px] text-[var(--color-text-tertiary)]">
               <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer" className="hover:text-[var(--color-text-secondary)]">
@@ -461,6 +522,15 @@ export default function QuickTools() {
               <Icon name="calculator" size={15} />
             </div>
             <p className="min-w-0 flex-1 truncate text-xs font-semibold text-[var(--color-text-primary)]">Calculator</p>
+            <button
+              type="button"
+              onClick={() => openNativeModule('calculator', 'Calculator', 'calculator')}
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+              title="Open Calculator module"
+              aria-label="Open Calculator module"
+            >
+              <Icon name="panel-right-open" size={13} />
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -690,9 +760,9 @@ function sanitizeFormula(value: string) {
   return value.replace(/[^0-9+\-*/^().\s]/g, '');
 }
 
-function formatVnd(value: number) {
+function formatCurrencyAmount(value: number, currency: DisplayCurrency) {
   return new Intl.NumberFormat('vi-VN', {
-    maximumFractionDigits: 0,
+    maximumFractionDigits: currency.fractionDigits,
   }).format(value);
 }
 
@@ -801,10 +871,14 @@ class MathParser {
   }
 }
 
-function loadStoredRate(): RateCache | null {
+function getRateCacheKey(currencyCode: MoneyCurrencyCode) {
+  return `${RATE_CACHE_KEY_PREFIX}${currencyCode}`;
+}
+
+function loadStoredRate(currencyCode: MoneyCurrencyCode): RateCache | null {
   try {
-    const parsed = JSON.parse(localStorage.getItem(RATE_CACHE_KEY) || 'null') as RateCache | null;
-    if (!parsed || !Number.isFinite(parsed.rate) || parsed.rate <= 0) return null;
+    const parsed = JSON.parse(localStorage.getItem(getRateCacheKey(currencyCode)) || 'null') as RateCache | null;
+    if (!parsed || parsed.baseCode !== currencyCode || !Number.isFinite(parsed.rate) || parsed.rate <= 0) return null;
     return parsed;
   } catch {
     return null;

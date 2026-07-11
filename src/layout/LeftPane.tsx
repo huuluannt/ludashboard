@@ -88,6 +88,9 @@ export default function LeftPane({ openingSwipeActive = false, openingSwipeOffse
   const [sidebarSwipeActive, setSidebarSwipeActive] = useState(false);
   const [sidebarSwipeOffset, setSidebarSwipeOffset] = useState(0);
   const visualCollapsed = collapsed && !openingSwipeActive;
+  const accountDropdownClassName = visualCollapsed
+    ? 'dropdown-up-enter absolute bottom-2 left-full z-50 ml-2 w-60 rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg'
+    : 'dropdown-up-enter absolute bottom-full left-2 right-2 z-50 mb-1 rounded-xl border border-[var(--color-border)] bg-white py-1 shadow-lg';
 
   useEffect(() => {
     const updateTime = () => {
@@ -753,8 +756,8 @@ export default function LeftPane({ openingSwipeActive = false, openingSwipeOffse
       {hasLuVideoTab && !visualCollapsed && <LuVideoMiniPlayer onClose={() => closeTab('luvideo')} />}
 
       <div className="flex-shrink-0 border-t border-[var(--color-border-subtle)] relative" ref={accountDropdownRef}>
-        {accountDropdownOpen && !visualCollapsed && (
-          <div className="dropdown-up-enter absolute bottom-full left-2 right-2 mb-1 bg-white rounded-xl border border-[var(--color-border)] shadow-lg z-50 py-1">
+        {accountDropdownOpen && (
+          <div className={accountDropdownClassName}>
             <DropdownItem icon="settings" label="Settings" onClick={() => setAccountDropdownOpen(false)} />
             <DropdownItem
               icon={themeMode === 'dark' ? 'sun' : 'moon'}
@@ -1303,7 +1306,7 @@ function OpenModuleCard({
               )}
               {mod && (
                 <DropdownItem
-                  icon="pin"
+                  icon="star"
                   label="Pick"
                   onClick={() => {
                     setDropdownOpen(false);
@@ -1559,7 +1562,7 @@ function ModuleCard({
                 }}
               />
               <DropdownItem
-                icon="pin"
+                icon="star"
                 label="Pick"
                 onClick={() => {
                   onPick();
