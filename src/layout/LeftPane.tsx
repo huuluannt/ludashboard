@@ -28,7 +28,12 @@ const VIETNAMESE_DAYS = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ
 
 type SidebarModule = RegisteredModule;
 
-export default function LeftPane() {
+interface LeftPaneProps {
+  openingSwipeActive?: boolean;
+  openingSwipeOffset?: number;
+}
+
+export default function LeftPane({ openingSwipeActive = false, openingSwipeOffset = 0 }: LeftPaneProps) {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
   const setSidebarCollapsed = useSidebarStore((s) => s.setCollapsed);
@@ -82,6 +87,7 @@ export default function LeftPane() {
   const [timeDetail, setTimeDetail] = useState('');
   const [sidebarSwipeActive, setSidebarSwipeActive] = useState(false);
   const [sidebarSwipeOffset, setSidebarSwipeOffset] = useState(0);
+  const visualCollapsed = collapsed && !openingSwipeActive;
 
   useEffect(() => {
     const updateTime = () => {
@@ -423,13 +429,18 @@ export default function LeftPane() {
         sidebar-transition flex flex-col h-full
         bg-[var(--color-surface-subtle)] border-r border-[var(--color-border-subtle)]
         select-none flex-shrink-0 max-md:fixed max-md:left-0 max-md:top-0 max-md:bottom-0 max-md:z-50 max-md:transition-transform max-md:duration-200
-        ${sidebarSwipeActive ? 'max-md:transition-none' : ''}
-        ${collapsed ? 'overflow-visible' : 'overflow-hidden'}
-        ${collapsed ? 'max-md:-translate-x-full max-md:pointer-events-none' : 'max-md:translate-x-0 max-md:shadow-2xl'}
+        ${sidebarSwipeActive || openingSwipeActive ? 'max-md:transition-none' : ''}
+        ${visualCollapsed ? 'overflow-visible' : 'overflow-hidden'}
+        ${visualCollapsed ? 'max-md:-translate-x-full max-md:pointer-events-none' : 'max-md:translate-x-0 max-md:shadow-2xl'}
       `}
       style={{
-        width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
-        transform: sidebarSwipeOffset ? `translateX(${sidebarSwipeOffset}px)` : undefined,
+        width: visualCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
+        transition: sidebarSwipeActive || openingSwipeActive ? 'none' : undefined,
+        transform: sidebarSwipeOffset
+          ? `translateX(${sidebarSwipeOffset}px)`
+          : openingSwipeActive
+            ? `translateX(${openingSwipeOffset}px)`
+            : undefined,
       }}
       onPointerCancelCapture={finishSidebarSwipe}
       onPointerDownCapture={handleSidebarPointerDown}
@@ -440,8 +451,8 @@ export default function LeftPane() {
       onTouchMoveCapture={handleSidebarTouchMove}
       onTouchStartCapture={handleSidebarTouchStart}
     >
-      <div className={`flex items-center h-14 px-3 gap-2.5 flex-shrink-0 ${collapsed ? 'justify-center' : ''}`}>
-        {!collapsed ? (
+      <div className={`flex items-center h-14 px-3 gap-2.5 flex-shrink-0 ${visualCollapsed ? 'justify-center' : ''}`}>
+        {!visualCollapsed ? (
           <>
             <button
               type="button"
@@ -481,7 +492,7 @@ export default function LeftPane() {
         )}
       </div>
 
-      {!collapsed && (
+      {!visualCollapsed && (
         <div className="grid grid-cols-2 gap-2 px-3 pb-2 flex-shrink-0">
           <button
             onClick={() => {
@@ -523,7 +534,7 @@ export default function LeftPane() {
         </div>
       )}
 
-      {collapsed && (
+      {visualCollapsed && (
         <CollapsedImportActions
           onImportUrl={() => {
             setEditingModule(null);
@@ -540,7 +551,7 @@ export default function LeftPane() {
 
       <PickedModuleSlot
         mod={pickedModule}
-        collapsed={collapsed}
+        collapsed={visualCollapsed}
         active={pickedModuleId === activeTabId}
         onOpen={() => {
           if (pickedModule) handleOpenModule(pickedModule);
@@ -551,7 +562,7 @@ export default function LeftPane() {
         onClearPick={() => setPickedModule(null)}
       />
 
-      {!collapsed && (
+      {!visualCollapsed && (
         <div className="flex-shrink-0 px-1.5 py-1">
           <div className="flex items-center px-2 pb-2 pt-2">
             <span className="text-[10px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">
@@ -631,7 +642,7 @@ export default function LeftPane() {
 
       <div
         className={`flex-1 px-1.5 py-1 ${
-          collapsed ? 'relative z-30 overflow-visible' : 'mobile-sidebar-swipe-zone overflow-y-auto'
+          visualCollapsed ? 'relative z-30 overflow-visible' : 'mobile-sidebar-swipe-zone overflow-y-auto'
         }`}
         onPointerCancelCapture={finishSidebarSwipe}
         onPointerDownCapture={handleSidebarPointerDown}
@@ -642,7 +653,7 @@ export default function LeftPane() {
         onTouchMoveCapture={handleSidebarTouchMove}
         onTouchStartCapture={handleSidebarTouchStart}
       >
-        {collapsed ? (
+        {visualCollapsed ? (
           openTabItems.map(({ tab, mod, manifest, source, importedMod }) => (
             <OpenModuleCard
               key={tab.moduleId}
@@ -738,11 +749,11 @@ export default function LeftPane() {
         )}
       </div>
 
-      {hasLuMusicTab && !collapsed && <MiniMusicPlayer onClose={() => closeTab('lumusic')} />}
-      {hasLuVideoTab && !collapsed && <LuVideoMiniPlayer onClose={() => closeTab('luvideo')} />}
+      {hasLuMusicTab && !visualCollapsed && <MiniMusicPlayer onClose={() => closeTab('lumusic')} />}
+      {hasLuVideoTab && !visualCollapsed && <LuVideoMiniPlayer onClose={() => closeTab('luvideo')} />}
 
       <div className="flex-shrink-0 border-t border-[var(--color-border-subtle)] relative" ref={accountDropdownRef}>
-        {accountDropdownOpen && !collapsed && (
+        {accountDropdownOpen && !visualCollapsed && (
           <div className="dropdown-up-enter absolute bottom-full left-2 right-2 mb-1 bg-white rounded-xl border border-[var(--color-border)] shadow-lg z-50 py-1">
             <DropdownItem icon="settings" label="Settings" onClick={() => setAccountDropdownOpen(false)} />
             <DropdownItem
@@ -789,7 +800,7 @@ export default function LeftPane() {
               <Icon name="user" size={15} className="text-[var(--color-text-tertiary)]" />
             )}
           </div>
-          {!collapsed && (
+          {!visualCollapsed && (
             <div className="flex-1 text-left overflow-hidden">
               {user ? (
                 <>

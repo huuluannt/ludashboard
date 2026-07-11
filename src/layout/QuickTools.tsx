@@ -9,6 +9,7 @@ import { useTabStore } from '@/state/tabStore';
 import { useFixedPopoverPosition } from './useFixedPopoverPosition';
 
 const GOOGLE_URL = 'https://www.google.com/';
+const GOOGLE_TRANSLATE_URL = 'https://translate.google.com.vn/';
 const LUPANEL_URL = 'https://lupanel.vercel.app/';
 const USD_VND_RATE_URL = 'https://open.er-api.com/v6/latest/USD';
 const RATE_CACHE_KEY = 'ludashboard_usd_vnd_rate';
@@ -321,6 +322,15 @@ export default function QuickTools() {
               </select>
               <p className="truncate text-[10px] text-[var(--color-text-tertiary)]">Vietnamese to/from English</p>
             </div>
+            <button
+              type="button"
+              onClick={() => window.open(GOOGLE_TRANSLATE_URL, '_blank', 'noopener,noreferrer')}
+              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-surface-subtle)] hover:text-[var(--color-text-primary)]"
+              title="Open Google Translate"
+              aria-label="Open Google Translate"
+            >
+              <Icon name="external-link" size={13} />
+            </button>
             <button
               type="button"
               onClick={clearTranslator}
