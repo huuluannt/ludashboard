@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import type { ChangeEvent, FormEvent } from 'react';
+import type { ChangeEvent, ClipboardEvent as ReactClipboardEvent, FormEvent } from 'react';
 import { useModuleStore } from '@/state/moduleStore';
 import type { ImportedModule, ImportedModuleType, ModuleOverride } from '@/state/moduleStore';
 import { useTabStore } from '@/state/tabStore';
@@ -7,7 +7,7 @@ import { useSidebarStore } from '@/state/sidebarStore';
 import { moduleRegistry } from '@/modules/moduleRegistry';
 import type { ModuleManifest } from '@/modules/moduleTypes';
 import { applyModuleOverride, registerImportedModule } from '@/modules/registryRuntime';
-import { getCustomIconLibrary } from '@/lib/customIconLibrary';
+import { getCustomIconLibrary, svgToDataUrl } from '@/lib/customIconLibrary';
 import Icon, { availableIcons, resolveLucideIconName } from './Icon';
 
 const MAX_ICON_SIZE = 512 * 1024;
@@ -77,6 +77,64 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
   const iconFileInputRef = useRef<HTMLInputElement>(null);
   const lucideIconInputRef = useRef<HTMLInputElement>(null);
 
+  const applyIconDataUrl = (dataUrl: string, source: 'selected' | 'pasted') => {
+    const dataUrlSize = new Blob([dataUrl]).size;
+    if (dataUrlSize > MAX_ICON_SIZE) {
+      setIconUploadError(`${source === 'pasted' ? 'Pasted icon' : 'Icon file'} must be under 512 KB.`);
+      return;
+    }
+
+    setIcon(dataUrl);
+    setIconUploadError('');
+    setLucideIconError('');
+    setShowLucideIconInput(false);
+    setShowIconPicker(false);
+  };
+
+  const applyIconFile = (file: File, source: 'selected' | 'pasted') => {
+    if (!file.type.startsWith('image/')) {
+      setIconUploadError(source === 'pasted' ? 'Clipboard does not contain an image icon.' : 'Please choose an image file.');
+      return;
+    }
+
+    if (file.size > MAX_ICON_SIZE) {
+      setIconUploadError(`${source === 'pasted' ? 'Pasted icon' : 'Icon file'} must be under 512 KB.`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        applyIconDataUrl(reader.result, source);
+      }
+    };
+    reader.onerror = () => setIconUploadError(`Could not read that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
+    reader.readAsDataURL(file);
+  };
+
+  const pasteIconFromClipboard = (clipboardData: DataTransfer | null, preventDefault: () => void) => {
+    if (!clipboardData) return false;
+
+    const payload = getClipboardIconPayload(clipboardData);
+    if (!payload) return false;
+
+    preventDefault();
+    if (payload.kind === 'file') {
+      applyIconFile(payload.file, 'pasted');
+      return true;
+    }
+
+    applyIconDataUrl(payload.dataUrl, 'pasted');
+    return true;
+  };
+
+  const handleIconPasteCapture = (event: ReactClipboardEvent<HTMLDivElement>) => {
+    pasteIconFromClipboard(event.clipboardData, () => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+  };
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (iconPickerRef.current && !iconPickerRef.current.contains(e.target as Node)) {
@@ -85,6 +143,23 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
     };
     if (showIconPicker) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, [showIconPicker]);
+
+  useEffect(() => {
+    const handler = (event: ClipboardEvent) => {
+      if (event.defaultPrevented) return;
+      const target = event.target instanceof Node ? event.target : null;
+      const activeElement = document.activeElement;
+      const isIconFieldTarget =
+        (target != null && iconPickerRef.current?.contains(target)) ||
+        (activeElement != null && iconPickerRef.current?.contains(activeElement));
+
+      if (!showIconPicker && !isIconFieldTarget) return;
+      pasteIconFromClipboard(event.clipboardData, () => event.preventDefault());
+    };
+
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
   }, [showIconPicker]);
 
   useEffect(() => {
@@ -101,27 +176,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setIconUploadError('Please choose an image file.');
-      return;
-    }
-
-    if (file.size > MAX_ICON_SIZE) {
-      setIconUploadError('Icon file must be under 512 KB.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setIcon(reader.result);
-        setIconUploadError('');
-        setShowIconPicker(false);
-      }
-    };
-    reader.onerror = () => setIconUploadError('Could not read that icon file.');
-    reader.readAsDataURL(file);
+    applyIconFile(file, 'selected');
   };
 
   const openLucideIconInput = () => {
@@ -253,7 +308,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5 relative" ref={iconPickerRef}>
+            <div className="flex flex-col gap-1.5 relative" ref={iconPickerRef} onPasteCapture={handleIconPasteCapture}>
               <label className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-wider">Icon</label>
               <button
                 type="button"
@@ -430,4 +485,39 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
       </div>
     </div>
   );
+}
+
+type ClipboardIconPayload =
+  | { kind: 'file'; file: File }
+  | { kind: 'data-url'; dataUrl: string };
+
+function getClipboardIconPayload(clipboardData: DataTransfer): ClipboardIconPayload | null {
+  for (const item of Array.from(clipboardData.items)) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) return { kind: 'file', file };
+    }
+  }
+
+  for (const file of Array.from(clipboardData.files)) {
+    if (file.type.startsWith('image/')) return { kind: 'file', file };
+  }
+
+  const text = clipboardData.getData('text/plain').trim();
+  if (!text) return null;
+
+  if (text.toLowerCase().startsWith('data:image/')) {
+    return { kind: 'data-url', dataUrl: text };
+  }
+
+  if (looksLikeSvg(text)) {
+    return { kind: 'data-url', dataUrl: svgToDataUrl(text) };
+  }
+
+  return null;
+}
+
+function looksLikeSvg(value: string) {
+  const normalized = value.replace(/^\uFEFF/, '').trim();
+  return /^<svg[\s>]/i.test(normalized) || /^<\?xml[\s\S]*<svg[\s>]/i.test(normalized);
 }
