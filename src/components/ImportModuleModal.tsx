@@ -10,7 +10,10 @@ import { applyModuleOverride, registerImportedModule } from '@/modules/registryR
 import { getCustomIconLibrary, svgToDataUrl } from '@/lib/customIconLibrary';
 import Icon, { availableIcons, resolveLucideIconName } from './Icon';
 
-const MAX_ICON_SIZE = 512 * 1024;
+const MAX_ICON_SOURCE_SIZE = 5 * 1024 * 1024;
+const MAX_STORED_ICON_SIZE = 96 * 1024;
+const ICON_CANVAS_SIZE = 96;
+const ICON_WEBP_QUALITY = 0.82;
 const PANEL_MODULE_DEFAULTS = {
   title: 'Panel-',
   id: 'panel',
@@ -77,11 +80,10 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
   const iconFileInputRef = useRef<HTMLInputElement>(null);
   const lucideIconInputRef = useRef<HTMLInputElement>(null);
 
-  const applyIconDataUrl = (dataUrl: string, source: 'selected' | 'pasted') => {
-    const dataUrlSize = new Blob([dataUrl]).size;
-    if (dataUrlSize > MAX_ICON_SIZE) {
-      setIconUploadError(`${source === 'pasted' ? 'Pasted icon' : 'Icon file'} must be under 512 KB.`);
-      return;
+  const commitIconDataUrl = (dataUrl: string, source: 'selected' | 'pasted') => {
+    if (getByteSize(dataUrl) > MAX_STORED_ICON_SIZE) {
+      setIconUploadError(`${source === 'pasted' ? 'Pasted icon' : 'Icon file'} is too large after optimization.`);
+      return false;
     }
 
     setIcon(dataUrl);
@@ -89,23 +91,52 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
     setLucideIconError('');
     setShowLucideIconInput(false);
     setShowIconPicker(false);
+    return true;
   };
 
-  const applyIconFile = (file: File, source: 'selected' | 'pasted') => {
+  const applyIconDataUrl = async (dataUrl: string, source: 'selected' | 'pasted') => {
+    if (getByteSize(dataUrl) > MAX_ICON_SOURCE_SIZE) {
+      setIconUploadError(`${source === 'pasted' ? 'Pasted image' : 'Icon file'} must be under 5 MB.`);
+      return;
+    }
+
+    const mimeType = getDataUrlMimeType(dataUrl);
+    if (mimeType && isRasterIconMimeType(mimeType)) {
+      try {
+        commitIconDataUrl(await optimizeIconDataUrl(dataUrl), source);
+      } catch {
+        setIconUploadError(`Could not optimize that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
+      }
+      return;
+    }
+
+    commitIconDataUrl(dataUrl, source);
+  };
+
+  const applyIconFile = async (file: File, source: 'selected' | 'pasted') => {
     if (!file.type.startsWith('image/')) {
       setIconUploadError(source === 'pasted' ? 'Clipboard does not contain an image icon.' : 'Please choose an image file.');
       return;
     }
 
-    if (file.size > MAX_ICON_SIZE) {
-      setIconUploadError(`${source === 'pasted' ? 'Pasted icon' : 'Icon file'} must be under 512 KB.`);
+    if (file.size > MAX_ICON_SOURCE_SIZE) {
+      setIconUploadError(`${source === 'pasted' ? 'Pasted image' : 'Icon file'} must be under 5 MB.`);
+      return;
+    }
+
+    if (isRasterIconMimeType(file.type)) {
+      try {
+        commitIconDataUrl(await optimizeIconFile(file), source);
+      } catch {
+        setIconUploadError(`Could not optimize that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
+      }
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        applyIconDataUrl(reader.result, source);
+        void applyIconDataUrl(reader.result, source);
       }
     };
     reader.onerror = () => setIconUploadError(`Could not read that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
@@ -120,11 +151,11 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
 
     preventDefault();
     if (payload.kind === 'file') {
-      applyIconFile(payload.file, 'pasted');
+      void applyIconFile(payload.file, 'pasted');
       return true;
     }
 
-    applyIconDataUrl(payload.dataUrl, 'pasted');
+    void applyIconDataUrl(payload.dataUrl, 'pasted');
     return true;
   };
 
@@ -176,7 +207,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    applyIconFile(file, 'selected');
+    void applyIconFile(file, 'selected');
   };
 
   const openLucideIconInput = () => {
@@ -520,4 +551,64 @@ function getClipboardIconPayload(clipboardData: DataTransfer): ClipboardIconPayl
 function looksLikeSvg(value: string) {
   const normalized = value.replace(/^\uFEFF/, '').trim();
   return /^<svg[\s>]/i.test(normalized) || /^<\?xml[\s\S]*<svg[\s>]/i.test(normalized);
+}
+
+function getByteSize(value: string) {
+  return new Blob([value]).size;
+}
+
+function getDataUrlMimeType(dataUrl: string) {
+  return /^data:([^;,]+)/i.exec(dataUrl)?.[1]?.toLowerCase() ?? '';
+}
+
+function isRasterIconMimeType(mimeType: string) {
+  return /^image\/(png|jpe?g|webp|gif|bmp|avif)$/i.test(mimeType);
+}
+
+function optimizeIconFile(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+  return optimizeIconSource(objectUrl).finally(() => URL.revokeObjectURL(objectUrl));
+}
+
+function optimizeIconDataUrl(dataUrl: string) {
+  return optimizeIconSource(dataUrl);
+}
+
+function optimizeIconSource(source: string) {
+  return new Promise<string>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const sourceWidth = image.naturalWidth || image.width;
+      const sourceHeight = image.naturalHeight || image.height;
+      if (!sourceWidth || !sourceHeight) {
+        reject(new Error('Invalid image dimensions'));
+        return;
+      }
+
+      const scale = Math.min(1, ICON_CANVAS_SIZE / Math.max(sourceWidth, sourceHeight));
+      const width = Math.max(1, Math.round(sourceWidth * scale));
+      const height = Math.max(1, Math.round(sourceHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('Canvas unavailable'));
+        return;
+      }
+
+      context.clearRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      const webpDataUrl = canvas.toDataURL('image/webp', ICON_WEBP_QUALITY);
+      if (getByteSize(webpDataUrl) <= MAX_STORED_ICON_SIZE) {
+        resolve(webpDataUrl);
+        return;
+      }
+
+      resolve(canvas.toDataURL('image/png'));
+    };
+    image.onerror = () => reject(new Error('Image load failed'));
+    image.src = source;
+  });
 }
