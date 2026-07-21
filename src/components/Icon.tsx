@@ -192,6 +192,7 @@ import {
 } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
 import type { ComponentType } from 'react';
+import { isEmbeddedModuleIcon } from '@/lib/moduleIcon';
 
 const lucideIconMap = {
   Activity,
@@ -417,7 +418,7 @@ interface IconProps extends LucideProps {
 export const availableIcons = Object.keys(iconMap).sort((a, b) => a.localeCompare(b));
 
 export default function Icon({ name, ...props }: IconProps) {
-  if (name.startsWith('data:image/')) {
+  if (isEmbeddedModuleIcon(name)) {
     const { size = 16, className } = props;
     return (
       <img

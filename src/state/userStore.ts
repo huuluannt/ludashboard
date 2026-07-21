@@ -23,6 +23,11 @@ export const useUserStore = create<UserStore>((set) => ({
 
   async hydrate() {
     const user = (await offlineStorage.getUser()) as UserInfo | null;
+    // One-time migration for installs created before workspace ownership was
+    // tracked: the persisted signed-in user is the only safe owner candidate.
+    if (user && user.id !== 'demo-user' && !(await offlineStorage.getWorkspaceOwner())) {
+      await offlineStorage.setWorkspaceOwner(user.id);
+    }
     set({ user, _hydrated: true });
   },
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'error';
+export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'local-only' | 'error';
 
 interface SyncStore {
   status: SyncStatus;
@@ -25,5 +25,7 @@ export const useSyncStore = create<SyncStore>((set) => ({
 }));
 
 // Listen to online/offline events
-window.addEventListener('online', () => useSyncStore.getState().setStatus('synced'));
+// Reconnecting means a pending write still has to be verified by the sync
+// manager; it is not evidence that local data already reached Firestore.
+window.addEventListener('online', () => useSyncStore.getState().setStatus('syncing'));
 window.addEventListener('offline', () => useSyncStore.getState().setStatus('offline'));

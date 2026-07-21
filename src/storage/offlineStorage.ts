@@ -13,6 +13,9 @@ const STORAGE_KEYS = {
   IMPORTED_MODULES: 'lu:importedModules',
   MODULE_OVERRIDES: 'lu:moduleOverrides',
   THEME_MODE: 'lu:themeMode',
+  WORKSPACE_OWNER: 'lu:workspaceOwner',
+  WORKSPACE_DIRTY: 'lu:workspaceDirty',
+  WORKSPACE_REVISION: 'lu:workspaceRevision',
 } as const;
 
 /**
@@ -102,5 +105,28 @@ export const offlineStorage = {
   },
   async setThemeMode(themeMode: 'light' | 'dark') {
     await set(STORAGE_KEYS.THEME_MODE, themeMode);
+  },
+
+  async getWorkspaceOwner(): Promise<string | null> {
+    const owner = await get(STORAGE_KEYS.WORKSPACE_OWNER);
+    return typeof owner === 'string' && owner ? owner : null;
+  },
+  async setWorkspaceOwner(userId: string) {
+    await set(STORAGE_KEYS.WORKSPACE_OWNER, userId);
+  },
+
+  async getWorkspaceDirty(): Promise<boolean> {
+    return (await get(STORAGE_KEYS.WORKSPACE_DIRTY)) === true;
+  },
+  async setWorkspaceDirty(dirty: boolean) {
+    await set(STORAGE_KEYS.WORKSPACE_DIRTY, dirty);
+  },
+
+  async getWorkspaceRevision(): Promise<string | null> {
+    const revision = await get(STORAGE_KEYS.WORKSPACE_REVISION);
+    return typeof revision === 'string' && revision ? revision : null;
+  },
+  async setWorkspaceRevision(revision: string) {
+    await set(STORAGE_KEYS.WORKSPACE_REVISION, revision);
   },
 };

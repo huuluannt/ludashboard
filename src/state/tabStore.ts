@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { TabItem } from '@/modules/moduleTypes';
 import { offlineStorage } from '@/storage/offlineStorage';
+import { normalizeModuleIcon } from '@/lib/moduleIcon';
 
 interface TabStore {
   tabs: TabItem[];
@@ -23,8 +24,15 @@ export const useTabStore = create<TabStore>((set, get) => ({
   _hydrated: false,
 
   async hydrate() {
-    const tabs = (await offlineStorage.getTabs()) as TabItem[];
+    const storedTabs = (await offlineStorage.getTabs()) as TabItem[];
+    const tabs = await Promise.all(storedTabs.map(async (tab) => ({
+      ...tab,
+      icon: await normalizeModuleIcon(tab.icon, 'package', { preserveSourceOnFailure: true }),
+    })));
     const activeTabId = (await offlineStorage.getActiveTab()) as string | null;
+    if (JSON.stringify(tabs) !== JSON.stringify(storedTabs)) {
+      await offlineStorage.setTabs(tabs);
+    }
     set({ tabs, activeTabId, _hydrated: true });
   },
 

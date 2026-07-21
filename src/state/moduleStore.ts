@@ -1,16 +1,19 @@
 import { create } from 'zustand';
 import { offlineStorage } from '@/storage/offlineStorage';
 import type { ModuleManifest } from '@/modules/moduleTypes';
+import { getModuleIconFallback, normalizeModuleIcon } from '@/lib/moduleIcon';
 
 export type ImportedModuleType = 'url' | 'panel';
 
 export interface ImportedModule extends ModuleManifest {
   url: string; // The online URL
   moduleType?: ImportedModuleType;
+  iconLocalOnly?: boolean;
 }
 
 export interface ModuleOverride extends Omit<ModuleManifest, 'version'> {
   version?: string;
+  iconLocalOnly?: boolean;
 }
 
 interface ModuleStore {
@@ -35,8 +38,23 @@ export const useModuleStore = create<ModuleStore>((set, get) => ({
   _hydrated: false,
 
   async hydrate() {
-    const modules = await offlineStorage.getImportedModules() || [];
-    const overrides = await offlineStorage.getModuleOverrides() || [];
+    const storedModules = await offlineStorage.getImportedModules() || [];
+    const storedOverrides = await offlineStorage.getModuleOverrides() || [];
+    const modules = await Promise.all(storedModules.map(async (module: ImportedModule) => ({
+      ...module,
+      icon: await normalizeModuleIcon(module.icon, getModuleIconFallback(module.moduleType), { preserveSourceOnFailure: true }),
+    })));
+    const overrides = await Promise.all(storedOverrides.map(async (override: ModuleOverride) => ({
+      ...override,
+      icon: await normalizeModuleIcon(override.icon, 'package', { preserveSourceOnFailure: true }),
+    })));
+
+    if (JSON.stringify(modules) !== JSON.stringify(storedModules)) {
+      await offlineStorage.setImportedModules(modules);
+    }
+    if (JSON.stringify(overrides) !== JSON.stringify(storedOverrides)) {
+      await offlineStorage.setModuleOverrides(overrides);
+    }
     set({
       importedModules: modules,
       moduleOverrides: overrides,

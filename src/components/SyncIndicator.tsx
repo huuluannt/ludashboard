@@ -3,12 +3,16 @@ import Icon from './Icon';
 
 export default function SyncIndicator() {
   const status = useSyncStore((s) => s.status);
+  const errorMessage = useSyncStore((s) => s.errorMessage);
   
   if (status === 'synced') return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-[999] pointer-events-none">
-      <div className="bg-white border border-[var(--color-border)] shadow-lg rounded-full px-3 py-1.5 flex items-center gap-2">
+      <div
+        className="bg-white border border-[var(--color-border)] shadow-lg rounded-full px-3 py-1.5 flex items-center gap-2"
+        title={errorMessage ?? undefined}
+      >
         {status === 'syncing' && (
           <>
             <div className="w-3 h-3 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" />
@@ -19,6 +23,12 @@ export default function SyncIndicator() {
           <>
             <Icon name="cloud" size={12} className="text-[var(--color-text-tertiary)]" />
             <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Offline Mode</span>
+          </>
+        )}
+        {status === 'local-only' && (
+          <>
+            <Icon name="hard-drive" size={12} className="text-[var(--color-warning)]" />
+            <span className="text-xs font-medium text-[var(--color-warning)]">Saved Locally · Cloud Pending</span>
           </>
         )}
         {status === 'error' && (

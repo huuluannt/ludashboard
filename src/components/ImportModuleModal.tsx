@@ -8,12 +8,17 @@ import { moduleRegistry } from '@/modules/moduleRegistry';
 import type { ModuleManifest } from '@/modules/moduleTypes';
 import { applyModuleOverride, registerImportedModule } from '@/modules/registryRuntime';
 import { getCustomIconLibrary, svgToDataUrl } from '@/lib/customIconLibrary';
+import {
+  getModuleIconFallback,
+  getUtf8ByteSize,
+  isEmbeddedModuleIcon,
+  MAX_MODULE_ICON_BYTES,
+  MAX_MODULE_ICON_SOURCE_BYTES,
+  normalizeModuleIcon,
+  normalizeModuleIconFile,
+} from '@/lib/moduleIcon';
 import Icon, { availableIcons, resolveLucideIconName } from './Icon';
 
-const MAX_ICON_SOURCE_SIZE = 5 * 1024 * 1024;
-const MAX_STORED_ICON_SIZE = 96 * 1024;
-const ICON_CANVAS_SIZE = 96;
-const ICON_WEBP_QUALITY = 0.82;
 const PANEL_MODULE_DEFAULTS = {
   title: 'Panel-',
   id: 'panel',
@@ -35,6 +40,7 @@ export type EditableModule = ModuleManifest & {
   url?: string;
   isImported?: boolean;
   moduleType?: ImportedModuleType;
+  iconLocalOnly?: boolean;
 };
 
 export type ImportModulePreset = ImportedModuleType;
@@ -81,7 +87,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
   const lucideIconInputRef = useRef<HTMLInputElement>(null);
 
   const commitIconDataUrl = (dataUrl: string, source: 'selected' | 'pasted') => {
-    if (getByteSize(dataUrl) > MAX_STORED_ICON_SIZE) {
+    if (getUtf8ByteSize(dataUrl) > MAX_MODULE_ICON_BYTES) {
       setIconUploadError(`${source === 'pasted' ? 'Pasted icon' : 'Icon file'} is too large after optimization.`);
       return false;
     }
@@ -95,22 +101,21 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
   };
 
   const applyIconDataUrl = async (dataUrl: string, source: 'selected' | 'pasted') => {
-    if (getByteSize(dataUrl) > MAX_ICON_SOURCE_SIZE) {
+    if (getUtf8ByteSize(dataUrl) > MAX_MODULE_ICON_SOURCE_BYTES * 1.5) {
       setIconUploadError(`${source === 'pasted' ? 'Pasted image' : 'Icon file'} must be under 5 MB.`);
       return;
     }
 
-    const mimeType = getDataUrlMimeType(dataUrl);
-    if (mimeType && isRasterIconMimeType(mimeType)) {
-      try {
-        commitIconDataUrl(await optimizeIconDataUrl(dataUrl), source);
-      } catch {
+    try {
+      const optimized = await normalizeModuleIcon(dataUrl, getModuleIconFallback(moduleType));
+      if (!isEmbeddedModuleIcon(optimized)) {
         setIconUploadError(`Could not optimize that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
+        return;
       }
-      return;
+      commitIconDataUrl(optimized, source);
+    } catch {
+      setIconUploadError(`Could not optimize that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
     }
-
-    commitIconDataUrl(dataUrl, source);
   };
 
   const applyIconFile = async (file: File, source: 'selected' | 'pasted') => {
@@ -119,28 +124,21 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
       return;
     }
 
-    if (file.size > MAX_ICON_SOURCE_SIZE) {
+    if (file.size > MAX_MODULE_ICON_SOURCE_BYTES) {
       setIconUploadError(`${source === 'pasted' ? 'Pasted image' : 'Icon file'} must be under 5 MB.`);
       return;
     }
 
-    if (isRasterIconMimeType(file.type)) {
-      try {
-        commitIconDataUrl(await optimizeIconFile(file), source);
-      } catch {
+    try {
+      const optimized = await normalizeModuleIconFile(file, getModuleIconFallback(moduleType));
+      if (!isEmbeddedModuleIcon(optimized)) {
         setIconUploadError(`Could not optimize that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
+        return;
       }
-      return;
+      commitIconDataUrl(optimized, source);
+    } catch {
+      setIconUploadError(`Could not optimize that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        void applyIconDataUrl(reader.result, source);
-      }
-    };
-    reader.onerror = () => setIconUploadError(`Could not read that ${source === 'pasted' ? 'pasted' : 'selected'} icon.`);
-    reader.readAsDataURL(file);
   };
 
   const pasteIconFromClipboard = (clipboardData: DataTransfer | null, preventDefault: () => void) => {
@@ -256,6 +254,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
         offline,
         openInNewWindow,
         permissions: editingModule.permissions,
+        ...(editingModule.iconLocalOnly && icon === editingModule.icon ? { iconLocalOnly: true } : {}),
       };
 
       saveModuleOverride(override);
@@ -276,6 +275,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
       openInNewWindow,
       url: url.trim(),
       moduleType,
+      ...(editingModule?.iconLocalOnly && icon === editingModule.icon ? { iconLocalOnly: true } : {}),
     };
 
     if (isEditing && editingModule && editingModule.id !== newModule.id) {
@@ -297,7 +297,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
     onClose();
   };
 
-  const iconLabel = icon.startsWith('data:image/') ? 'custom icon' : icon;
+  const iconLabel = isEmbeddedModuleIcon(icon) ? 'custom icon' : icon;
   const lucideIconPreview = resolveLucideIconName(lucideIconName);
 
   return (
@@ -428,7 +428,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
                       </p>
                     )}
                   </div>
-                  {icon.startsWith('data:image/') && (
+                  {isEmbeddedModuleIcon(icon) && (
                     <button
                       type="button"
                       className="w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer bg-[var(--color-accent)] text-white"
@@ -444,8 +444,7 @@ export default function ImportModuleModal({ onClose, editingModule, importPreset
                           key={customIcon.id}
                           type="button"
                           onClick={() => {
-                            setIcon(customIcon.dataUrl);
-                            setShowIconPicker(false);
+                            void applyIconDataUrl(customIcon.dataUrl, 'selected');
                           }}
                           className={`
                             w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer transition-colors border
@@ -551,64 +550,4 @@ function getClipboardIconPayload(clipboardData: DataTransfer): ClipboardIconPayl
 function looksLikeSvg(value: string) {
   const normalized = value.replace(/^\uFEFF/, '').trim();
   return /^<svg[\s>]/i.test(normalized) || /^<\?xml[\s\S]*<svg[\s>]/i.test(normalized);
-}
-
-function getByteSize(value: string) {
-  return new Blob([value]).size;
-}
-
-function getDataUrlMimeType(dataUrl: string) {
-  return /^data:([^;,]+)/i.exec(dataUrl)?.[1]?.toLowerCase() ?? '';
-}
-
-function isRasterIconMimeType(mimeType: string) {
-  return /^image\/(png|jpe?g|webp|gif|bmp|avif)$/i.test(mimeType);
-}
-
-function optimizeIconFile(file: File) {
-  const objectUrl = URL.createObjectURL(file);
-  return optimizeIconSource(objectUrl).finally(() => URL.revokeObjectURL(objectUrl));
-}
-
-function optimizeIconDataUrl(dataUrl: string) {
-  return optimizeIconSource(dataUrl);
-}
-
-function optimizeIconSource(source: string) {
-  return new Promise<string>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => {
-      const sourceWidth = image.naturalWidth || image.width;
-      const sourceHeight = image.naturalHeight || image.height;
-      if (!sourceWidth || !sourceHeight) {
-        reject(new Error('Invalid image dimensions'));
-        return;
-      }
-
-      const scale = Math.min(1, ICON_CANVAS_SIZE / Math.max(sourceWidth, sourceHeight));
-      const width = Math.max(1, Math.round(sourceWidth * scale));
-      const height = Math.max(1, Math.round(sourceHeight * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-
-      const context = canvas.getContext('2d');
-      if (!context) {
-        reject(new Error('Canvas unavailable'));
-        return;
-      }
-
-      context.clearRect(0, 0, width, height);
-      context.drawImage(image, 0, 0, width, height);
-      const webpDataUrl = canvas.toDataURL('image/webp', ICON_WEBP_QUALITY);
-      if (getByteSize(webpDataUrl) <= MAX_STORED_ICON_SIZE) {
-        resolve(webpDataUrl);
-        return;
-      }
-
-      resolve(canvas.toDataURL('image/png'));
-    };
-    image.onerror = () => reject(new Error('Image load failed'));
-    image.src = source;
-  });
 }
