@@ -59,7 +59,7 @@ let lastModuleErrorMessage: string | null = null;
 
 class ModuleCloudWriteError extends Error {
   constructor(
-    readonly kind: 'capacity' | 'validation' | 'conflict',
+    readonly kind: 'capacity' | 'validation',
     message: string,
   ) {
     super(message);
@@ -128,8 +128,8 @@ export function subscribeModuleCloudData<T>(
             ) return;
 
             // A durable local edit is authoritative until its transaction
-            // succeeds or the user resolves a cloud conflict. Do not let an
-            // older/future-skewed snapshot overwrite the accessible local copy.
+            // succeeds. Do not let an earlier snapshot overwrite the accessible
+            // local copy while that write is still queued.
             if (!hasPendingModuleValue(user.uid, moduleId, key)) {
               const value = snapshot.data()?.moduleData?.[moduleId]?.[key];
               if (isModuleCloudEnvelope<T>(value)) handlers.onData(value);
@@ -244,16 +244,6 @@ async function writePendingEntry(
       entry.moduleId,
       entry.key,
     );
-    if (currentEnvelope && currentEnvelope.updatedAt > entry.data.updatedAt) {
-      // Client clocks are not reliable enough to discard this local edit as
-      // stale. Keep it in the durable queue and surface a resolvable local-only
-      // conflict instead of silently overwriting either copy.
-      throw new ModuleCloudWriteError(
-        'conflict',
-        `Cloud has a newer version of ${entry.moduleId}/${entry.key}. ` +
-          'This local version remains saved on this device and was not discarded.',
-      );
-    }
     if (
       currentEnvelope?.updatedAt === entry.data.updatedAt &&
       areEquivalentCloudEnvelopes(currentEnvelope, entry.data)
@@ -261,6 +251,17 @@ async function writePendingEntry(
       // The exact value is already committed, so this is an idempotent retry.
       return 'remote-newer' as const;
     }
+    const committedData: ModuleCloudEnvelope<unknown> = {
+      ...entry.data,
+      // `updatedAt` is a logical cloud version here. Advancing it past both
+      // device clocks makes the transaction that commits last observable on
+      // every open device, instead of permanently rejecting a valid queued
+      // edit merely because another device's clock was ahead.
+      updatedAt: nextCommittedModuleTimestamp(
+        entry.data.updatedAt,
+        currentEnvelope?.updatedAt,
+      ),
+    };
 
     let candidate: Record<string, unknown>;
     try {
@@ -268,7 +269,7 @@ async function writePendingEntry(
       // envelope, so dynamic module/key field names and actual document nesting
       // depth are validated before Firestore sees them.
       candidate = normalizeFirestoreData(
-        setModuleDataEntry(currentModuleData, entry.moduleId, entry.key, entry.data),
+        setModuleDataEntry(currentModuleData, entry.moduleId, entry.key, committedData),
       );
     } catch (error) {
       throw createValidationError(entry.moduleId, entry.key, error);
@@ -680,6 +681,19 @@ function areEquivalentCloudEnvelopes(
   } catch {
     return false;
   }
+}
+
+function nextCommittedModuleTimestamp(localTimestamp: number, remoteTimestamp?: number) {
+  const newestKnownTimestamp = Math.max(
+    Number.isFinite(localTimestamp) ? localTimestamp : 0,
+    typeof remoteTimestamp === 'number' && Number.isFinite(remoteTimestamp)
+      ? remoteTimestamp
+      : 0,
+    Date.now(),
+  );
+  return newestKnownTimestamp < Number.MAX_SAFE_INTEGER
+    ? newestKnownTimestamp + 1
+    : newestKnownTimestamp;
 }
 
 function isModuleCloudEnvelope<T>(value: unknown): value is ModuleCloudEnvelope<T> {

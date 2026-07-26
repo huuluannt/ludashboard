@@ -1,4 +1,4 @@
-import { doc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { db, app } from './config';
 import { useUserStore } from '@/state/userStore';
@@ -28,6 +28,7 @@ import {
   normalizeFirestoreData,
 } from './cloudDocumentBudget';
 import { assertWorkspaceOwnership, WorkspaceOwnershipError } from './workspaceOwnership';
+import { rebaseWorkspaceState, toWorkspaceBase } from './workspaceMerge';
 
 let syncTimeout: ReturnType<typeof setTimeout> | null = null;
 let isInitialSync = true;
@@ -44,7 +45,9 @@ let syncRetryDelayMs = 5_000;
 let syncRetryAttemptCount = 0;
 let workspaceDirtyPersistence: Promise<void> = Promise.resolve();
 let workspaceRevisionPersistence: Promise<void> = Promise.resolve();
+let workspaceBasePersistence: Promise<void> = Promise.resolve();
 let lastKnownWorkspaceRevision: string | null = null;
+let requestWorkspaceConflictRecovery: ((userId: string) => void) | null = null;
 
 type CloudImportedModule = ImportedModule & { iconLocalOnly?: boolean };
 type CloudModuleOverride = ModuleOverride & { iconLocalOnly?: boolean };
@@ -294,7 +297,10 @@ async function writeWorkspaceDocument(userId: string, options: WriteWorkspaceOpt
   });
   if (wroteDocument) {
     lastKnownWorkspaceRevision = nextRevision;
-    await persistWorkspaceRevision(nextRevision);
+    await Promise.all([
+      persistWorkspaceRevision(nextRevision),
+      persistWorkspaceBase(toWorkspaceBase(workspaceState)),
+    ]);
   }
   return wroteDocument;
 }
@@ -322,12 +328,19 @@ async function performSyncToCloud() {
       }
     }
   } catch (error) {
-    console.error('Failed to sync to cloud', error);
     if (!isCurrentSyncUser(user.id)) return;
+    if (error instanceof WorkspaceConflictError) {
+      // A different device won the optimistic transaction. Refetch its state,
+      // rebase the pending local changes, and retry instead of permanently
+      // parking an otherwise syncable workspace in local-only mode.
+      useSyncStore.getState().setStatus('syncing');
+      requestWorkspaceConflictRecovery?.(user.id);
+      return;
+    }
+    console.error('Failed to sync to cloud', error);
     if (
       error instanceof CloudCapacityError ||
       error instanceof WorkspaceOwnershipError ||
-      error instanceof WorkspaceConflictError ||
       isFirestoreCapacityError(error)
     ) {
       useSyncStore.getState().setStatus(
@@ -363,14 +376,12 @@ export const syncToCloud = async () => {
 const fetchCloudConfig = async (context: FetchContext, hasPendingLocalChanges: boolean) => {
   const { userId } = context;
   if (!navigator.onLine || !isFetchContextCurrent(context)) return false;
-  let fetchHadPersistedDirty = false;
 
   useSyncStore.getState().setStatus('syncing');
   try {
     await assertWorkspaceOwnership(userId);
     if (!isFetchContextCurrent(context)) return false;
     const persistedWorkspaceDirty = await offlineStorage.getWorkspaceDirty();
-    fetchHadPersistedDirty = persistedWorkspaceDirty;
     if (!isFetchContextCurrent(context)) return false;
     const localWorkspaceRevision = lastKnownWorkspaceRevision ?? await offlineStorage.getWorkspaceRevision();
     lastKnownWorkspaceRevision = localWorkspaceRevision;
@@ -382,29 +393,37 @@ const fetchCloudConfig = async (context: FetchContext, hasPendingLocalChanges: b
     const remoteWorkspaceRevision = typeof snapshotData?.syncRevision === 'string'
       ? snapshotData.syncRevision
       : null;
-    if (
+    const needsRebase =
       (hasPendingLocalChanges || persistedWorkspaceDirty) &&
       remoteWorkspaceRevision !== localWorkspaceRevision &&
-      (remoteWorkspaceRevision !== null || localWorkspaceRevision !== null)
-    ) {
-      throw new WorkspaceConflictError();
-    }
+      (remoteWorkspaceRevision !== null || localWorkspaceRevision !== null);
     let remoteIsCanonical = false;
+    const remoteState = snapshotData ?? {};
     if (snapshot.exists()) {
-      const remoteState = snapshotData ?? {};
       const isLegacyDocument = remoteState.syncSchemaVersion !== 2;
       remoteIsCanonical = !isLegacyDocument && remoteWorkspaceRevision !== null;
+      let stateToMerge = remoteState;
+      let mergeStrategy: MergeStrategy | (() => MergeStrategy) = () => {
+        if (
+          hasPendingLocalChanges ||
+          persistedWorkspaceDirty ||
+          changeRevision > context.baselineRevision
+        ) return 'local';
+        if (isLegacyDocument && hasMeaningfulLocalWorkspace()) return 'union';
+        return 'remote';
+      };
+
+      if (needsRebase) {
+        const localState = await buildCloudWorkspaceState();
+        if (!isFetchContextCurrent(context)) return false;
+        const workspaceBase = await offlineStorage.getWorkspaceBase();
+        if (!isFetchContextCurrent(context)) return false;
+        stateToMerge = rebaseWorkspaceState(workspaceBase, localState, remoteState);
+        mergeStrategy = 'remote';
+      }
       const merged = await mergeState(
-        remoteState,
-        () => {
-          if (
-            hasPendingLocalChanges ||
-            persistedWorkspaceDirty ||
-            changeRevision > context.baselineRevision
-          ) return 'local';
-          if (isLegacyDocument && hasMeaningfulLocalWorkspace()) return 'union';
-          return 'remote';
-        },
+        stateToMerge,
+        mergeStrategy,
         context,
       );
       if (!merged) return false;
@@ -421,7 +440,10 @@ const fetchCloudConfig = async (context: FetchContext, hasPendingLocalChanges: b
       // rotate the revision on every page load and make concurrent clean tabs
       // conflict with each other for no reason.
       lastKnownWorkspaceRevision = remoteWorkspaceRevision;
-      await persistWorkspaceRevision(remoteWorkspaceRevision);
+      await Promise.all([
+        persistWorkspaceRevision(remoteWorkspaceRevision),
+        persistWorkspaceBase(toWorkspaceBase(remoteState)),
+      ]);
       if (changeRevision === cleanHydrationRevision) {
         await persistWorkspaceDirty(false);
       }
@@ -450,15 +472,10 @@ const fetchCloudConfig = async (context: FetchContext, hasPendingLocalChanges: b
     }
     return false;
   } catch (error) {
-    if (
-      error instanceof WorkspaceConflictError &&
-      !hasPendingLocalChanges &&
-      !fetchHadPersistedDirty &&
-      changeRevision <= context.baselineRevision &&
-      isFetchContextCurrent(context)
-    ) {
-      // A clean migration can race another clean tab. Refetch the winning
-      // revision instead of parking a workspace that has no unsynced edits.
+    if (error instanceof WorkspaceConflictError && isFetchContextCurrent(context)) {
+      // Whether the conflict came from a clean migration or a dirty rebase,
+      // another writer merely won this round. The fetch retry will rebase on
+      // that winning revision; no user data needs to become local-only.
       useSyncStore.getState().setStatus('syncing');
       return false;
     }
@@ -467,7 +484,6 @@ const fetchCloudConfig = async (context: FetchContext, hasPendingLocalChanges: b
     if (
       error instanceof CloudCapacityError ||
       error instanceof WorkspaceOwnershipError ||
-      error instanceof WorkspaceConflictError ||
       isFirestoreCapacityError(error)
     ) {
       useSyncStore.getState().setStatus(
@@ -508,6 +524,16 @@ function persistWorkspaceRevision(revision: string) {
       console.error('Failed to persist workspace revision', error);
     });
   return workspaceRevisionPersistence;
+}
+
+function persistWorkspaceBase(workspaceBase: Record<string, unknown>) {
+  workspaceBasePersistence = workspaceBasePersistence
+    .catch(() => undefined)
+    .then(() => offlineStorage.setWorkspaceBase(workspaceBase))
+    .catch((error) => {
+      console.error('Failed to persist workspace merge base', error);
+    });
+  return workspaceBasePersistence;
 }
 
 function applyRemoteStateMutation(mutate: () => void) {
@@ -571,9 +597,12 @@ export const initSyncManager = () => {
   let fetchAttemptCount = 0;
   let automaticFetchRetryCount = 0;
   let fetchRetryDelayMs = 5_000;
-  let initialBaselineRevision = changeRevision;
   let initialReadySettled = false;
   let resolveInitialReady: (() => void) | null = null;
+  let unsubscribeWorkspaceSnapshot: (() => void) | null = null;
+  let workspaceSnapshotUserId: string | null = null;
+  let workspaceSnapshotGeneration = 0;
+  let workspaceSnapshotChain: Promise<void> = Promise.resolve();
   const auth = getAuth(app);
   initialSyncReadyPromise = new Promise<void>((resolve) => {
     resolveInitialReady = resolve;
@@ -613,6 +642,132 @@ export const initSyncManager = () => {
     }, delayMs);
   };
 
+  const stopWorkspaceSubscription = () => {
+    workspaceSnapshotGeneration += 1;
+    workspaceSnapshotUserId = null;
+    unsubscribeWorkspaceSnapshot?.();
+    unsubscribeWorkspaceSnapshot = null;
+  };
+
+  const processWorkspaceSnapshot = async (
+    userId: string,
+    generation: number,
+    remoteState: Record<string, unknown> | null,
+  ) => {
+    const isCurrent = () =>
+      !disposed &&
+      generation === workspaceSnapshotGeneration &&
+      workspaceSnapshotUserId === userId &&
+      isCurrentSyncUser(userId);
+    if (!isCurrent()) return;
+
+    // Our own transaction can emit its snapshot before writeWorkspaceDocument
+    // has persisted the winning revision. Let that transaction settle first so
+    // its acknowledgement is not mistaken for a competing device.
+    const activeSync = syncInFlight;
+    if (activeSync) await activeSync.catch(() => undefined);
+    if (!isCurrent() || isInitialSync || activeFetchPromise) return;
+
+    const remoteWorkspaceRevision = typeof remoteState?.syncRevision === 'string'
+      ? remoteState.syncRevision
+      : null;
+    if (remoteWorkspaceRevision && remoteWorkspaceRevision === lastKnownWorkspaceRevision) return;
+
+    if (!remoteState || !remoteWorkspaceRevision || remoteState.syncSchemaVersion !== 2) {
+      useSyncStore.getState().setStatus('syncing');
+      requestWorkspaceConflictRecovery?.(userId);
+      return;
+    }
+
+    const persistedWorkspaceDirty = await offlineStorage.getWorkspaceDirty();
+    if (!isCurrent()) return;
+    if (persistedWorkspaceDirty || changeRevision > syncedRevision) {
+      // A remote writer advanced while this device also has edits. The normal
+      // fetch path performs a deletion-aware three-way rebase, then retries the
+      // transaction against this newest revision.
+      useSyncStore.getState().setStatus('syncing');
+      requestWorkspaceConflictRecovery?.(userId);
+      return;
+    }
+
+    const baselineRevision = changeRevision;
+    const context: FetchContext = {
+      userId,
+      attempt: ++latestFetchAttempt,
+      baselineRevision,
+    };
+    const merged = await mergeState(
+      remoteState,
+      () => changeRevision > baselineRevision ? 'local' : 'remote',
+      context,
+    );
+    if (!merged || !isCurrent()) return;
+
+    if (changeRevision > baselineRevision) {
+      useSyncStore.getState().setStatus('syncing');
+      requestWorkspaceConflictRecovery?.(userId);
+      return;
+    }
+
+    lastKnownWorkspaceRevision = remoteWorkspaceRevision;
+    await Promise.all([
+      persistWorkspaceRevision(remoteWorkspaceRevision),
+      persistWorkspaceBase(toWorkspaceBase(remoteState)),
+      persistWorkspaceDirty(false),
+    ]);
+    if (!isCurrent()) return;
+    syncedRevision = Math.max(syncedRevision, baselineRevision);
+    clearSyncRetry();
+    useSyncStore.getState().setStatus('synced');
+  };
+
+  const startWorkspaceSubscription = (userId: string) => {
+    if (
+      disposed ||
+      !isCurrentSyncUser(userId) ||
+      (workspaceSnapshotUserId === userId && unsubscribeWorkspaceSnapshot)
+    ) return;
+
+    stopWorkspaceSubscription();
+    workspaceSnapshotUserId = userId;
+    const generation = workspaceSnapshotGeneration;
+    const docRef = doc(db, 'users', userId, 'workspace', 'config');
+    unsubscribeWorkspaceSnapshot = onSnapshot(
+      docRef,
+      (snapshot) => {
+        const remoteState = snapshot.exists() ? snapshot.data() : null;
+        workspaceSnapshotChain = workspaceSnapshotChain
+          .catch(() => undefined)
+          .then(() => processWorkspaceSnapshot(userId, generation, remoteState))
+          .catch((error) => {
+            if (!disposed && generation === workspaceSnapshotGeneration) {
+              console.error('Failed to apply realtime workspace update', error);
+              useSyncStore.getState().setStatus(
+                'error',
+                error instanceof Error ? error.message : 'Failed to apply realtime workspace update.',
+              );
+            }
+          });
+      },
+      (error) => {
+        if (
+          disposed ||
+          generation !== workspaceSnapshotGeneration ||
+          !isCurrentSyncUser(userId)
+        ) return;
+        console.error('Workspace realtime listener failed', error);
+        unsubscribeWorkspaceSnapshot = null;
+        workspaceSnapshotUserId = null;
+        isInitialSync = true;
+        useSyncStore.getState().setStatus(
+          navigator.onLine ? 'error' : 'offline',
+          error instanceof Error ? error.message : 'Workspace realtime listener failed.',
+        );
+        scheduleFetchRetry(userId);
+      },
+    );
+  };
+
   const beginInitialFetch = (userId: string, force = false) => {
     if (disposed || !hydrated || !isCurrentSyncUser(userId)) return;
     if (activeFetchPromise && activeFetchUserId === userId) return;
@@ -625,7 +780,7 @@ export const initSyncManager = () => {
       attempt: ++latestFetchAttempt,
       baselineRevision: changeRevision,
     };
-    const hasPendingLocalChanges = changeRevision > initialBaselineRevision;
+    const hasPendingLocalChanges = changeRevision > syncedRevision;
     fetchAttemptCount += 1;
     activeFetchPromise = fetchCloudConfig(context, hasPendingLocalChanges);
     void activeFetchPromise.then((synced) => {
@@ -636,12 +791,20 @@ export const initSyncManager = () => {
         isInitialSync = false;
         clearFetchRetry();
         resetFetchRetryBackoff();
+        startWorkspaceSubscription(userId);
         if (changeRevision > syncedRevision) schedulePendingSync(0);
       } else {
         isInitialSync = true;
         if (useSyncStore.getState().status !== 'local-only') scheduleFetchRetry(userId);
       }
     });
+  };
+
+  requestWorkspaceConflictRecovery = (userId: string) => {
+    if (disposed || !hydrated || !isCurrentSyncUser(userId)) return;
+    isInitialSync = true;
+    resetFetchRetryBackoff();
+    beginInitialFetch(userId, true);
   };
 
   const checkHydrated = () => {
@@ -672,7 +835,6 @@ export const initSyncManager = () => {
 
     const user = useUserStore.getState().user;
     if (user && user.id !== 'demo-user' && auth.currentUser?.uid === user.id) {
-      initialBaselineRevision = changeRevision;
       beginInitialFetch(user.id);
     } else {
       isInitialSync = false;
@@ -728,12 +890,12 @@ export const initSyncManager = () => {
     useUserStore.subscribe((state, prevState) => {
       checkHydrated();
       if (!hydrated || state.user?.id === prevState.user?.id) return;
+      stopWorkspaceSubscription();
       latestFetchAttempt += 1;
       activeFetchPromise = null;
       activeFetchUserId = null;
       fetchAttemptCount = 0;
       resetFetchRetryBackoff();
-      initialBaselineRevision = changeRevision;
       clearFetchRetry();
       clearPendingSync();
       clearSyncRetry();
@@ -745,12 +907,41 @@ export const initSyncManager = () => {
         useSyncStore.getState().setStatus(navigator.onLine ? 'synced' : 'offline');
       }
     }),
-    useSidebarStore.subscribe(handleWorkspaceChange),
-    useTabStore.subscribe(handleWorkspaceChange),
-    useModuleStore.subscribe(handleWorkspaceChange),
-    useRightSidebarStore.subscribe(handleWorkspaceChange),
-    useRightCornerSidebarStore.subscribe(handleWorkspaceChange),
-    useThemeStore.subscribe(handleWorkspaceChange),
+    useSidebarStore.subscribe((state, prevState) => {
+      if (
+        state.collapsed !== prevState.collapsed ||
+        state.pinnedModuleIds !== prevState.pinnedModuleIds ||
+        state.moduleOrderIds !== prevState.moduleOrderIds
+      ) handleWorkspaceChange();
+    }),
+    useTabStore.subscribe((state, prevState) => {
+      if (state.tabs !== prevState.tabs || state.activeTabId !== prevState.activeTabId) {
+        handleWorkspaceChange();
+      }
+    }),
+    useModuleStore.subscribe((state, prevState) => {
+      if (
+        state.importedModules !== prevState.importedModules ||
+        state.moduleOverrides !== prevState.moduleOverrides
+      ) handleWorkspaceChange();
+    }),
+    useRightSidebarStore.subscribe((state, prevState) => {
+      if (
+        state.enabled !== prevState.enabled ||
+        state.visible !== prevState.visible ||
+        state.moduleId !== prevState.moduleId
+      ) handleWorkspaceChange();
+    }),
+    useRightCornerSidebarStore.subscribe((state, prevState) => {
+      if (
+        state.enabled !== prevState.enabled ||
+        state.visible !== prevState.visible ||
+        state.moduleId !== prevState.moduleId
+      ) handleWorkspaceChange();
+    }),
+    useThemeStore.subscribe((state, prevState) => {
+      if (state.mode !== prevState.mode) handleWorkspaceChange();
+    }),
   ];
 
   const cleanup = () => {
@@ -759,10 +950,12 @@ export const initSyncManager = () => {
     unsubscribeAuth();
     window.removeEventListener('online', handleOnline);
     unsubscribers.forEach((unsubscribe) => unsubscribe());
+    stopWorkspaceSubscription();
     latestFetchAttempt += 1;
     clearFetchRetry();
     clearPendingSync();
     clearSyncRetry();
+    if (requestWorkspaceConflictRecovery) requestWorkspaceConflictRecovery = null;
     settleInitialReady();
     isInitialSync = true;
     managerCleanup = null;

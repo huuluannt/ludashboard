@@ -16,6 +16,7 @@ const STORAGE_KEYS = {
   WORKSPACE_OWNER: 'lu:workspaceOwner',
   WORKSPACE_DIRTY: 'lu:workspaceDirty',
   WORKSPACE_REVISION: 'lu:workspaceRevision',
+  WORKSPACE_BASE: 'lu:workspaceBase',
 } as const;
 
 /**
@@ -128,5 +129,15 @@ export const offlineStorage = {
   },
   async setWorkspaceRevision(revision: string) {
     await set(STORAGE_KEYS.WORKSPACE_REVISION, revision);
+  },
+
+  async getWorkspaceBase(): Promise<Record<string, unknown> | null> {
+    const workspaceBase = await get(STORAGE_KEYS.WORKSPACE_BASE);
+    return workspaceBase && typeof workspaceBase === 'object' && !Array.isArray(workspaceBase)
+      ? workspaceBase as Record<string, unknown>
+      : null;
+  },
+  async setWorkspaceBase(workspaceBase: Record<string, unknown>) {
+    await set(STORAGE_KEYS.WORKSPACE_BASE, workspaceBase);
   },
 };
